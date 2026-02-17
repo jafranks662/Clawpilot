@@ -327,6 +327,14 @@ enum SkillCommands {
         /// Skill name
         name: String,
     },
+    /// Run an installed skill
+    Run {
+        /// Skill name
+        skill_name: String,
+        /// Raw command arguments passed to the skill
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        raw_args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -523,7 +531,7 @@ async fn main() -> Result<()> {
         } => integrations::handle_command(integration_command, &config),
 
         Commands::Skills { skill_command } => {
-            skills::handle_command(skill_command, &config.workspace_dir)
+            skills::handle_command(skill_command, &config).await
         }
 
         Commands::Migrate { migrate_command } => {

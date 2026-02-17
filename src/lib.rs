@@ -121,6 +121,14 @@ pub enum SkillCommands {
         /// Skill name to remove
         name: String,
     },
+    /// Run an installed skill
+    Run {
+        /// Skill name to run
+        skill_name: String,
+        /// Raw command arguments passed to the skill
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        raw_args: Vec<String>,
+    },
 }
 
 /// Migration subcommands
