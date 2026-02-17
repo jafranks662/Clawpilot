@@ -813,7 +813,8 @@ pub async fn start_channels(config: Config) -> Result<()> {
         &config,
     ));
 
-    let skills = crate::skills::load_skills(&workspace);
+    let skills = crate::skills::load_skills_for_run(&workspace);
+    let _skills_env = crate::skills::apply_env_overrides_for_run(&skills);
 
     // Collect tool descriptions for the prompt
     let mut tool_descs: Vec<(&str, &str)> = vec![
@@ -1504,6 +1505,9 @@ mod tests {
             tools: vec![],
             prompts: vec!["Long prompt content that should NOT appear in system prompt".into()],
             location: None,
+            skill_key: "code-review".into(),
+            primary_env: None,
+            requires_env: vec![],
         }];
 
         let prompt = build_system_prompt(ws.path(), "model", &[], &skills, None, None);

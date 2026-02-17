@@ -1,6 +1,7 @@
 use anyhow::Result;
 use directories::UserDirs;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -28,6 +29,36 @@ pub struct Skill {
     pub prompts: Vec<String>,
     #[serde(skip)]
     pub location: Option<PathBuf>,
+    #[serde(skip)]
+    pub skill_key: String,
+    #[serde(skip)]
+    pub primary_env: Option<String>,
+    #[serde(skip)]
+    pub requires_env: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ClawpilotConfig {
+    #[serde(default)]
+    pub skills: SkillsConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SkillsConfig {
+    #[serde(default)]
+    pub entries: HashMap<String, SkillEntryConfig>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SkillEntryConfig {
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default, rename = "apiKey")]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    #[serde(default)]
+    pub config: HashMap<String, Value>,
 }
 
 /// A tool defined by a skill (shell command, HTTP call, etc.)
@@ -63,6 +94,60 @@ struct SkillMeta {
     author: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(default)]
+    requirements: SkillRequirements,
+    #[serde(default)]
+    metadata: SkillMetadata,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct SkillRequirements {
+    #[serde(default)]
+    env: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct SkillMetadata {
+    #[serde(default)]
+    openclaw: OpenClawMetadata,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct OpenClawMetadata {
+    #[serde(default, rename = "skillKey")]
+    skill_key: Option<String>,
+    #[serde(default, rename = "primaryEnv")]
+    primary_env: Option<String>,
+}
+
+pub struct SkillEnvGuard {
+    original: HashMap<String, Option<String>>,
+}
+
+impl Drop for SkillEnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in &self.original {
+            match value {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+}
+
+impl SkillEnvGuard {
+    fn new() -> Self {
+        Self {
+            original: HashMap::new(),
+        }
+    }
+
+    fn capture(&mut self, key: &str) {
+        if !self.original.contains_key(key) {
+            self.original
+                .insert(key.to_string(), std::env::var(key).ok());
+        }
+    }
 }
 
 fn default_version() -> String {
@@ -79,6 +164,108 @@ pub fn load_skills(workspace_dir: &Path) -> Vec<Skill> {
 
     skills.extend(load_workspace_skills(workspace_dir));
     skills
+}
+
+pub fn load_skills_for_run(workspace_dir: &Path) -> Vec<Skill> {
+    let skills = load_skills(workspace_dir);
+    let config = load_clawpilot_config();
+
+    skills
+        .into_iter()
+        .filter(|skill| is_skill_enabled(skill, &config.skills.entries))
+        .collect()
+}
+
+fn apply_env_overrides_for_run_with_entries(
+    skills: &[Skill],
+    entries: &HashMap<String, SkillEntryConfig>,
+) -> SkillEnvGuard {
+    let mut guard = SkillEnvGuard::new();
+
+    for skill in skills {
+        let Some(entry) = entries.get(&skill.skill_key) else {
+            continue;
+        };
+
+        for (key, value) in &entry.env {
+            if std::env::var(key).is_err() {
+                guard.capture(key);
+                std::env::set_var(key, value);
+            }
+        }
+
+        if let (Some(primary_env), Some(api_key)) = (&skill.primary_env, &entry.api_key) {
+            if std::env::var(primary_env).is_err() && !entry.env.contains_key(primary_env) {
+                guard.capture(primary_env);
+                std::env::set_var(primary_env, api_key);
+            }
+        }
+    }
+
+    guard
+}
+
+pub fn apply_env_overrides_for_run(skills: &[Skill]) -> SkillEnvGuard {
+    let config = load_clawpilot_config();
+    apply_env_overrides_for_run_with_entries(skills, &config.skills.entries)
+}
+
+fn load_clawpilot_config() -> ClawpilotConfig {
+    load_clawpilot_config_from_path(&clawpilot_config_path())
+}
+
+fn load_clawpilot_config_from_path(path: &Path) -> ClawpilotConfig {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return ClawpilotConfig::default();
+    };
+
+    serde_json::from_str(&content).unwrap_or_default()
+}
+
+fn clawpilot_config_path() -> PathBuf {
+    if let Some(dirs) = UserDirs::new() {
+        dirs.home_dir().join(".clawpilot").join("clawpilot.json")
+    } else {
+        PathBuf::from(".clawpilot/clawpilot.json")
+    }
+}
+
+fn is_skill_enabled(skill: &Skill, entries: &HashMap<String, SkillEntryConfig>) -> bool {
+    let entry = entries.get(&skill.skill_key);
+    let requires_ok = skill_requirements_met(skill, entry);
+
+    match entry.and_then(|e| e.enabled) {
+        Some(false) => false,
+        Some(true) => requires_ok,
+        None => requires_ok,
+    }
+}
+
+fn skill_requirements_met(skill: &Skill, entry: Option<&SkillEntryConfig>) -> bool {
+    skill.requires_env.iter().all(|required_key| {
+        std::env::var(required_key).is_ok()
+            || entry.is_some_and(|e| {
+                e.env.contains_key(required_key)
+                    || (skill.primary_env.as_deref() == Some(required_key.as_str())
+                        && e.api_key.as_ref().is_some())
+            })
+    })
+}
+
+fn injected_env_names(skill: &Skill, entry: Option<&SkillEntryConfig>) -> Vec<String> {
+    let Some(entry) = entry else {
+        return Vec::new();
+    };
+
+    let mut names: Vec<String> = entry.env.keys().cloned().collect();
+    if let (Some(primary_env), Some(_)) = (&skill.primary_env, &entry.api_key) {
+        if !entry.env.contains_key(primary_env) {
+            names.push(primary_env.clone());
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
 }
 
 fn load_workspace_skills(workspace_dir: &Path) -> Vec<Skill> {
@@ -293,6 +480,15 @@ fn load_skill_toml(path: &Path) -> Result<Skill> {
     let manifest: SkillManifest = toml::from_str(&content)?;
 
     Ok(Skill {
+        skill_key: manifest
+            .skill
+            .metadata
+            .openclaw
+            .skill_key
+            .clone()
+            .unwrap_or_else(|| manifest.skill.name.clone()),
+        primary_env: manifest.skill.metadata.openclaw.primary_env.clone(),
+        requires_env: manifest.skill.requirements.env.clone(),
         name: manifest.skill.name,
         description: manifest.skill.description,
         version: manifest.skill.version,
@@ -314,6 +510,9 @@ fn load_skill_md(path: &Path, dir: &Path) -> Result<Skill> {
         .to_string();
 
     Ok(Skill {
+        skill_key: name.clone(),
+        primary_env: None,
+        requires_env: Vec::new(),
         name,
         description: extract_description(&content),
         version: "0.1.0".to_string(),
@@ -334,6 +533,9 @@ fn load_open_skill_md(path: &Path) -> Result<Skill> {
         .to_string();
 
     Ok(Skill {
+        skill_key: name.clone(),
+        primary_env: None,
+        requires_env: Vec::new(),
         name,
         description: extract_description(&content),
         version: "open-skills".to_string(),
@@ -457,6 +659,7 @@ pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Re
     match command {
         crate::SkillCommands::List => {
             let skills = load_skills(workspace_dir);
+            let config = load_clawpilot_config();
             if skills.is_empty() {
                 println!("No skills installed.");
                 println!();
@@ -468,12 +671,20 @@ pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Re
                 println!("Installed skills ({}):", skills.len());
                 println!();
                 for skill in &skills {
+                    let entry = config.skills.entries.get(&skill.skill_key);
+                    let enabled = is_skill_enabled(skill, &config.skills.entries);
+                    let status_label = if enabled { "enabled" } else { "disabled" };
                     println!(
-                        "  {} {} — {}",
+                        "  {} {} [{}] — {}",
                         console::style(&skill.name).white().bold(),
                         console::style(format!("v{}", skill.version)).dim(),
+                        console::style(status_label).dim(),
                         skill.description
                     );
+                    let env_names = injected_env_names(skill, entry);
+                    if !env_names.is_empty() {
+                        println!("    Injects env: {}", env_names.join(", "));
+                    }
                     if !skill.tools.is_empty() {
                         println!(
                             "    Tools: {}",
@@ -698,6 +909,9 @@ command = "echo hello"
             tools: vec![],
             prompts: vec!["Do the thing.".to_string()],
             location: None,
+            skill_key: "test".to_string(),
+            primary_env: None,
+            requires_env: vec![],
         }];
         let prompt = skills_to_prompt(&skills);
         assert!(prompt.contains("test"));
@@ -888,6 +1102,9 @@ description = "Bare minimum"
             }],
             prompts: vec![],
             location: None,
+            skill_key: "weather".to_string(),
+            primary_env: None,
+            requires_env: vec![],
         }];
         let prompt = skills_to_prompt(&skills);
         assert!(prompt.contains("weather"));
@@ -921,6 +1138,98 @@ description = "Bare minimum"
         assert_eq!(skills.len(), 1);
         assert_eq!(skills[0].name, "from-toml"); // TOML takes priority
     }
+
+    #[test]
+    fn skill_env_injection_and_restore() {
+        let dynamic = format!("ZEROCLAW_TEST_ENV_{}", std::process::id());
+        std::env::remove_var(&dynamic);
+
+        let skill = Skill {
+            name: "env-skill".into(),
+            description: "d".into(),
+            version: "0.1.0".into(),
+            author: None,
+            tags: vec![],
+            tools: vec![],
+            prompts: vec![],
+            location: None,
+            skill_key: "env-key".into(),
+            primary_env: Some("ZEROCLAW_PRIMARY_ENV_TEST".into()),
+            requires_env: vec![],
+        };
+
+        std::env::set_var("ZEROCLAW_PRIMARY_ENV_TEST", "already-set");
+
+        let mut entries = HashMap::new();
+        entries.insert(
+            "env-key".into(),
+            SkillEntryConfig {
+                enabled: Some(true),
+                api_key: Some("secret-key".into()),
+                env: HashMap::from([(dynamic.clone(), "from-config".into())]),
+                config: HashMap::new(),
+            },
+        );
+
+        {
+            let _guard = apply_env_overrides_for_run_with_entries(&[skill], &entries);
+            assert_eq!(std::env::var(&dynamic).as_deref(), Ok("from-config"));
+            assert_eq!(
+                std::env::var("ZEROCLAW_PRIMARY_ENV_TEST").as_deref(),
+                Ok("already-set")
+            );
+        }
+
+        assert!(std::env::var(&dynamic).is_err());
+        assert_eq!(
+            std::env::var("ZEROCLAW_PRIMARY_ENV_TEST").as_deref(),
+            Ok("already-set")
+        );
+        std::env::remove_var("ZEROCLAW_PRIMARY_ENV_TEST");
+    }
+
+    #[test]
+    fn skill_api_key_maps_to_primary_env() {
+        std::env::remove_var("ZEROCLAW_PRIMARY_ENV_API_KEY_TEST");
+
+        let skill = Skill {
+            name: "api-skill".into(),
+            description: "d".into(),
+            version: "0.1.0".into(),
+            author: None,
+            tags: vec![],
+            tools: vec![],
+            prompts: vec![],
+            location: None,
+            skill_key: "api-key".into(),
+            primary_env: Some("ZEROCLAW_PRIMARY_ENV_API_KEY_TEST".into()),
+            requires_env: vec!["ZEROCLAW_PRIMARY_ENV_API_KEY_TEST".into()],
+        };
+
+        let mut entries = HashMap::new();
+        entries.insert(
+            "api-key".into(),
+            SkillEntryConfig {
+                enabled: Some(true),
+                api_key: Some("mapped-secret".into()),
+                env: HashMap::new(),
+                config: HashMap::new(),
+            },
+        );
+
+        assert!(skill_requirements_met(&skill, entries.get("api-key")));
+
+        {
+            let _guard = apply_env_overrides_for_run_with_entries(&[skill], &entries);
+            assert_eq!(
+                std::env::var("ZEROCLAW_PRIMARY_ENV_API_KEY_TEST").as_deref(),
+                Ok("mapped-secret")
+            );
+        }
+
+        assert!(std::env::var("ZEROCLAW_PRIMARY_ENV_API_KEY_TEST").is_err());
+    }
+
 }
 
 #[cfg(test)]
