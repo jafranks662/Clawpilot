@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime};
 
+pub mod scan;
+pub mod skill_md;
+pub mod types;
+
 const OPEN_SKILLS_REPO_URL: &str = "https://github.com/besoeasy/open-skills";
 const OPEN_SKILLS_SYNC_MARKER: &str = ".zeroclaw-open-skills-sync";
 const OPEN_SKILLS_SYNC_INTERVAL_SECS: u64 = 60 * 60 * 24 * 7;
@@ -434,6 +438,48 @@ pub fn init_skills_dir(workspace_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+fn print_skills_list_table(skills: &[types::ParsedSkill]) {
+    if skills.is_empty() {
+        println!("No skills found in ./skills.");
+        return;
+    }
+
+    println!(
+        "{:<24} {:<40} {:<36} {:<8} {}",
+        "NAME", "DESCRIPTION", "LOCATION", "ELIGIBLE", "REASON"
+    );
+    println!("{}", "-".repeat(124));
+
+    for skill in skills {
+        println!(
+            "{:<24} {:<40} {:<36} {:<8} {}",
+            skill.frontmatter.name,
+            skill.frontmatter.description,
+            skill.skill_dir.display(),
+            skill.eligible,
+            skill.reason
+        );
+    }
+}
+
+fn print_skill_detail(skill: &types::ParsedSkill) {
+    println!("name: {}", skill.frontmatter.name);
+    println!("description: {}", skill.frontmatter.description);
+    println!(
+        "metadata: {}",
+        skill
+            .frontmatter
+            .metadata
+            .as_ref()
+            .map(std::string::ToString::to_string)
+            .unwrap_or_else(|| "null".to_string())
+    );
+    println!("path: {}", skill.skill_md_path.display());
+    println!("location: {}", skill.skill_dir.display());
+    println!("eligible: {}", skill.eligible);
+    println!("reason: {}", skill.reason);
+}
+
 /// Recursively copy a directory (used as fallback when symlinks aren't available)
 #[cfg(any(windows, not(unix)))]
 fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
@@ -456,41 +502,17 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
 pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Result<()> {
     match command {
         crate::SkillCommands::List => {
-            let skills = load_skills(workspace_dir);
-            if skills.is_empty() {
-                println!("No skills installed.");
-                println!();
-                println!("  Create one: mkdir -p ~/.zeroclaw/workspace/skills/my-skill");
-                println!("              echo '# My Skill' > ~/.zeroclaw/workspace/skills/my-skill/SKILL.md");
-                println!();
-                println!("  Or install: zeroclaw skills install <github-url>");
-            } else {
-                println!("Installed skills ({}):", skills.len());
-                println!();
-                for skill in &skills {
-                    println!(
-                        "  {} {} — {}",
-                        console::style(&skill.name).white().bold(),
-                        console::style(format!("v{}", skill.version)).dim(),
-                        skill.description
-                    );
-                    if !skill.tools.is_empty() {
-                        println!(
-                            "    Tools: {}",
-                            skill
-                                .tools
-                                .iter()
-                                .map(|t| t.name.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        );
-                    }
-                    if !skill.tags.is_empty() {
-                        println!("    Tags:  {}", skill.tags.join(", "));
-                    }
-                }
-            }
-            println!();
+            let skills = scan::scan_skills(None)?;
+            print_skills_list_table(&skills);
+            Ok(())
+        }
+        crate::SkillCommands::Show { name } => {
+            let skills = scan::scan_skills(None)?;
+            let Some(skill) = skills.into_iter().find(|s| s.frontmatter.name == name) else {
+                anyhow::bail!("Skill not found: {name}");
+            };
+
+            print_skill_detail(&skill);
             Ok(())
         }
         crate::SkillCommands::Install { source } => {
