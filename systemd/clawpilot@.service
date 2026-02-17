@@ -1,0 +1,14 @@
+[Unit]
+Description=Clawpilot worker (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/clawpilot/%i.env
+ExecStart=/usr/bin/zeroclaw daemon --job-queue /var/lib/clawpilot/queue/%i --results-dir /var/lib/clawpilot/results/%i
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

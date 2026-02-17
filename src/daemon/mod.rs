@@ -8,7 +8,26 @@ use tokio::time::Duration;
 
 const STATUS_FLUSH_SECONDS: u64 = 5;
 
-pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
+pub async fn run(
+    config: Config,
+    host: String,
+    port: u16,
+    job_queue: Option<PathBuf>,
+    results_dir: Option<PathBuf>,
+) -> Result<()> {
+    if let Some(queue_dir) = job_queue {
+        let worker_results_dir = results_dir.unwrap_or_else(|| {
+            let agent = queue_dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("default");
+            PathBuf::from("/var/lib/clawpilot/results").join(agent)
+        });
+        tracing::info!("Starting queue worker mode: {}", queue_dir.display());
+        return crate::orchestrator::run_queue_worker(&queue_dir, &worker_results_dir, config)
+            .await;
+    }
+
     let initial_backoff = config.reliability.channel_initial_backoff_secs.max(1);
     let max_backoff = config
         .reliability

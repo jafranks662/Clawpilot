@@ -1,0 +1,14 @@
+[Unit]
+Description=Clawpilot Telegram orchestrator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/clawpilot/orchestrator.env
+ExecStart=/usr/bin/zeroclaw channel start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

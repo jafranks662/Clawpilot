@@ -547,3 +547,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Implement a trait, submit a PR:
     <img src="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=Date" alt="Star History Chart" />
   </a>
 </p>
+
+
+## Telegram Orchestrator
+See `docs/ORCHESTRATOR_TELEGRAM.md` for safe Telegram-based service supervision.
