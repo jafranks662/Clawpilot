@@ -1,0 +1,19 @@
+# Operator profile with explicit browser allowlist
+
+[provider]
+name = "openrouter"
+
+[agent]
+autonomy = "supervised"
+
+[security]
+workspace_only = true
+
+[runtime]
+kind = "docker"
+network = "bridge"
+
+[tools.browser]
+enabled = true
+allowed_domains = ["github.com", "docs.rs", "openrouter.ai"]
+native_headless = false

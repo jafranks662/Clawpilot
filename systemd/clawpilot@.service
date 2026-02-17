@@ -1,0 +1,21 @@
+[Unit]
+Description=clawpilot agent (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=clawpilot-%i
+WorkingDirectory=/home/clawpilot-%i/work
+EnvironmentFile=-/etc/clawpilot/%i.env
+ExecStart=/usr/local/bin/zeroclaw daemon
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/clawpilot-%i
+
+[Install]
+WantedBy=multi-user.target

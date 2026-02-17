@@ -2,7 +2,7 @@
   <img src="zeroclaw.png" alt="ZeroClaw" width="200" />
 </p>
 
-<h1 align="center">ZeroClaw 🦀</h1>
+<h1 align="center">clawpilot 🦀</h1>
 
 <p align="center">
   <strong>Zero overhead. Zero compromise. 100% Rust. 100% Agnostic.</strong><br>
@@ -15,6 +15,8 @@
 </p>
 
 Fast, small, and fully autonomous AI assistant infrastructure — deploy anywhere, swap anything.
+
+> **Repo name is clawpilot; CLI command remains `zeroclaw`.**
 
 ```
 ~3.4MB binary · <10ms startup · 1,017 tests · 22+ providers · 8 traits · Pluggable everything
@@ -33,6 +35,12 @@ Fast, small, and fully autonomous AI assistant infrastructure — deploy anywher
 - **Secure by design:** pairing, strict sandboxing, explicit allowlists, workspace scoping.
 - **Fully swappable:** core systems are traits (providers, channels, tools, memory, tunnels).
 - **No lock-in:** OpenAI-compatible provider support + pluggable custom endpoints.
+
+## How clawpilot/ZeroClaw differs from OpenClaw
+
+- **OpenClaw**: product/personal-assistant stack with chat channel integrations, gateway endpoints, and setup wizard UX. Upstream repo: <https://github.com/OpenClaw/openclaw>.
+- **ZeroClaw / clawpilot**: runtime and tool orchestrator for control-oriented operations, where browser and high-impact tools are opt-in and guarded with explicit allowlists/sandboxing controls.
+- **Focus in this fork**: Linux operator workflows, OpenRouter setup clarity, and practical runtime guardrails over convenience defaults.
 
 ## Benchmark Snapshot (ZeroClaw vs OpenClaw)
 
@@ -65,8 +73,8 @@ ls -lh target/release/zeroclaw
 ## Quick Start
 
 ```bash
-git clone https://github.com/zeroclaw-labs/zeroclaw.git
-cd zeroclaw
+git clone https://github.com/YOUR_GH_USER/clawpilot.git
+cd clawpilot
 cargo build --release --locked
 cargo install --path . --force --locked
 
@@ -115,6 +123,13 @@ zeroclaw migrate openclaw
 
 > **Dev fallback (no global install):** prefix commands with `cargo run --release --` (example: `cargo run --release -- status`).
 > **Low-memory boards (e.g., Raspberry Pi 3, 1GB RAM):** run `CARGO_BUILD_JOBS=1 cargo build --release` if the kernel kills rustc during compilation.
+
+
+## Operator guides
+
+- [OpenRouter + Linux desktop setup](docs/SETUP_OPENROUTER_LINUX_DESKTOP.md)
+- [Multi-agent operation](docs/MULTI_AGENT.md)
+- [Safety guardrails](docs/SAFETY_GUARDRAILS.md)
 
 ## Architecture
 
@@ -519,6 +534,10 @@ A heartfelt thank you to the communities and institutions that inspire and fuel 
 
 We're building in the open because the best ideas come from everywhere. If you're reading this, you're part of it. Welcome. 🦀❤️
 
+## Upstream credit
+
+clawpilot is maintained as a focused fork of ZeroClaw. Upstream project: <https://github.com/zeroclaw-labs/zeroclaw>.
+
 ## License
 
 MIT — see [LICENSE](LICENSE)
@@ -543,7 +562,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Implement a trait, submit a PR:
 ## Star History
 
 <p align="center">
-  <a href="https://www.star-history.com/#zeroclaw-labs/zeroclaw&Date">
-    <img src="https://api.star-history.com/svg?repos=zeroclaw-labs/zeroclaw&type=Date" alt="Star History Chart" />
+  <a href="https://www.star-history.com/#YOUR_GH_USER/clawpilot&Date">
+    <img src="https://api.star-history.com/svg?repos=YOUR_GH_USER/clawpilot&type=Date" alt="Star History Chart" />
   </a>
 </p>

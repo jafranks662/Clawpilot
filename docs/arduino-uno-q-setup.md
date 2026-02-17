@@ -65,9 +65,9 @@ source ~/.cargo/env
 sudo apt-get update
 sudo apt-get install -y pkg-config libssl-dev
 
-# Clone zeroclaw (or scp your project)
-git clone https://github.com/theonlyhennygod/zeroclaw.git
-cd zeroclaw
+# Clone clawpilot (or scp your project)
+git clone https://github.com/YOUR_GH_USER/clawpilot.git
+cd clawpilot
 
 # Build (takes ~15–30 min on Uno Q)
 cargo build --release
@@ -199,7 +199,7 @@ Now when you message your Telegram bot *"Turn on the LED"* or *"Set pin 13 high"
 | 2 | `ssh arduino@<IP>` |
 | 3 | `curl -sSf https://sh.rustup.rs \| sh -s -- -y && source ~/.cargo/env` |
 | 4 | `sudo apt-get install -y pkg-config libssl-dev` |
-| 5 | `git clone https://github.com/theonlyhennygod/zeroclaw.git && cd zeroclaw` |
+| 5 | `git clone https://github.com/YOUR_GH_USER/clawpilot.git && cd clawpilot` |
 | 6 | `cargo build --release --no-default-features` |
 | 7 | `zeroclaw onboard --api-key KEY --provider openrouter` |
 | 8 | Edit `~/.zeroclaw/config.toml` (add Telegram bot_token) |
