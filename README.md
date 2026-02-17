@@ -116,6 +116,17 @@ zeroclaw migrate openclaw
 > **Dev fallback (no global install):** prefix commands with `cargo run --release --` (example: `cargo run --release -- status`).
 > **Low-memory boards (e.g., Raspberry Pi 3, 1GB RAM):** run `CARGO_BUILD_JOBS=1 cargo build --release` if the kernel kills rustc during compilation.
 
+## Telegram
+
+Telegram support is built-in and managed through the channel commands:
+
+```bash
+zeroclaw channel doctor
+zeroclaw channel start
+```
+
+See the full testing and validation flow in [docs/TELEGRAM_TESTING_GUIDE.md](docs/TELEGRAM_TESTING_GUIDE.md). Telegram usage requires user allowlisting before inbound messages are accepted.
+
 ## Architecture
 
 Every subsystem is a **trait** — swap implementations with a config change, zero code changes.
