@@ -1,6 +1,12 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+const MAX_TAG_LENGTH = 20;
+
+function sanitizeTags(tags) {
+  return [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter((tag) => tag.length > 0 && tag.length <= MAX_TAG_LENGTH))];
+}
+
 export const dashboard = query({
   args: {},
   handler: async (ctx) => {
@@ -19,7 +25,8 @@ export const createTask = mutation({
   args: {
     title: v.string(),
     description: v.optional(v.string()),
-    assignee: v.union(v.literal("me"), v.literal("you"))
+    assignee: v.union(v.literal("me"), v.literal("you")),
+    tags: v.optional(v.array(v.string()))
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -27,6 +34,7 @@ export const createTask = mutation({
       title: args.title,
       description: args.description,
       assignee: args.assignee,
+      tags: sanitizeTags(args.tags || []),
       status: "todo",
       priority: "medium",
       createdAt: now,
@@ -51,6 +59,34 @@ export const updateTask = mutation({
   }
 });
 
+export const addTaskTag = mutation({
+  args: {
+    id: v.id("tasks"),
+    tag: v.string()
+  },
+  handler: async (ctx, args) => {
+    const task = await ctx.db.get(args.id);
+    if (!task) return;
+    const tags = sanitizeTags([...(task.tags || []), args.tag]);
+    await ctx.db.patch(args.id, { tags, updatedAt: Date.now() });
+  }
+});
+
+export const removeTaskTag = mutation({
+  args: {
+    id: v.id("tasks"),
+    tag: v.string()
+  },
+  handler: async (ctx, args) => {
+    const task = await ctx.db.get(args.id);
+    if (!task) return;
+    const normalizedTag = sanitizeTags([args.tag])[0];
+    if (!normalizedTag) return;
+    const tags = (task.tags || []).filter((tag) => tag !== normalizedTag);
+    await ctx.db.patch(args.id, { tags, updatedAt: Date.now() });
+  }
+});
+
 export const upsertPipeline = mutation({
   args: {
     id: v.optional(v.id("pipelineItems")),
@@ -59,16 +95,45 @@ export const upsertPipeline = mutation({
     brief: v.optional(v.string()),
     script: v.optional(v.string()),
     imageUrls: v.array(v.string()),
-    owner: v.union(v.literal("me"), v.literal("you"))
+    owner: v.union(v.literal("me"), v.literal("you")),
+    tags: v.optional(v.array(v.string()))
   },
   handler: async (ctx, args) => {
-    const payload = { ...args, updatedAt: Date.now() };
+    const payload = { ...args, tags: sanitizeTags(args.tags || []), updatedAt: Date.now() };
     delete payload.id;
     if (args.id) {
       await ctx.db.patch(args.id, payload);
       return args.id;
     }
     return await ctx.db.insert("pipelineItems", payload);
+  }
+});
+
+export const addPipelineTag = mutation({
+  args: {
+    id: v.id("pipelineItems"),
+    tag: v.string()
+  },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.id);
+    if (!item) return;
+    const tags = sanitizeTags([...(item.tags || []), args.tag]);
+    await ctx.db.patch(args.id, { tags, updatedAt: Date.now() });
+  }
+});
+
+export const removePipelineTag = mutation({
+  args: {
+    id: v.id("pipelineItems"),
+    tag: v.string()
+  },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.id);
+    if (!item) return;
+    const normalizedTag = sanitizeTags([args.tag])[0];
+    if (!normalizedTag) return;
+    const tags = (item.tags || []).filter((tag) => tag !== normalizedTag);
+    await ctx.db.patch(args.id, { tags, updatedAt: Date.now() });
   }
 });
 

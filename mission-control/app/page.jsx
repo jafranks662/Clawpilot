@@ -7,15 +7,28 @@ import { api } from "@/convex/_generated/api";
 const stages = ["idea", "research", "outline", "draft", "review", "design", "publish"];
 const statuses = ["todo", "in_progress", "blocked", "done"];
 
+function normalizeTag(rawTag) {
+  return rawTag.trim().toLowerCase().slice(0, 20);
+}
+
 export default function Page() {
   const board = useQuery(api.mission.dashboard) || { tasks: [], pipeline: [], calendar: [], memories: [], agents: [] };
   const [memoryQuery, setMemoryQuery] = useState("");
   const filteredMemories = useQuery(api.mission.searchMemories, { query: memoryQuery }) || [];
 
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskStatusFilter, setTaskStatusFilter] = useState("all");
+  const [selectedTaskTags, setSelectedTaskTags] = useState([]);
+  const [savedTaskFilters, setSavedTaskFilters] = useState([]);
+
   const seed = useMutation(api.mission.seed);
   const createTask = useMutation(api.mission.createTask);
   const updateTask = useMutation(api.mission.updateTask);
+  const addTaskTag = useMutation(api.mission.addTaskTag);
+  const removeTaskTag = useMutation(api.mission.removeTaskTag);
   const upsertPipeline = useMutation(api.mission.upsertPipeline);
+  const addPipelineTag = useMutation(api.mission.addPipelineTag);
+  const removePipelineTag = useMutation(api.mission.removePipelineTag);
   const createCalendarEvent = useMutation(api.mission.createCalendarEvent);
   const createMemory = useMutation(api.mission.createMemory);
 
@@ -23,12 +36,53 @@ export default function Page() {
     seed();
   }, [seed]);
 
-  const groupedTasks = useMemo(() => {
-    return statuses.reduce((acc, status) => {
-      acc[status] = board.tasks.filter((task) => task.status === status);
-      return acc;
-    }, {});
-  }, [board.tasks]);
+  const availableTaskTags = useMemo(
+    () => [...new Set(board.tasks.flatMap((task) => task.tags || []))].sort(),
+    [board.tasks]
+  );
+
+  const filteredTasks = useMemo(() => {
+    const search = taskSearch.trim().toLowerCase();
+    return board.tasks.filter((task) => {
+      const taskTags = task.tags || [];
+      const matchesSearch =
+        !search ||
+        task.title.toLowerCase().includes(search) ||
+        (task.description || "").toLowerCase().includes(search);
+      const matchesStatus = taskStatusFilter === "all" || task.status === taskStatusFilter;
+      const matchesTags = selectedTaskTags.every((tag) => taskTags.includes(tag));
+      return matchesSearch && matchesStatus && matchesTags;
+    });
+  }, [board.tasks, taskSearch, taskStatusFilter, selectedTaskTags]);
+
+  const groupedTasks = useMemo(
+    () =>
+      statuses.reduce((acc, status) => {
+        acc[status] = filteredTasks.filter((task) => task.status === status);
+        return acc;
+      }, {}),
+    [filteredTasks]
+  );
+
+  const saveCurrentFilter = () => {
+    const hasSelection = taskSearch.trim() || taskStatusFilter !== "all" || selectedTaskTags.length > 0;
+    if (!hasSelection) return;
+
+    const newFilter = {
+      id: `${Date.now()}`,
+      label: taskSearch.trim() || `status:${taskStatusFilter}`,
+      search: taskSearch,
+      status: taskStatusFilter,
+      tags: selectedTaskTags
+    };
+    setSavedTaskFilters((current) => [newFilter, ...current].slice(0, 5));
+  };
+
+  const applySavedFilter = (filter) => {
+    setTaskSearch(filter.search);
+    setTaskStatusFilter(filter.status);
+    setSelectedTaskTags(filter.tags);
+  };
 
   return (
     <main className="page">
@@ -40,6 +94,18 @@ export default function Page() {
       <section className="panel">
         <h2>Task Board</h2>
         <TaskComposer onCreate={createTask} />
+        <TaskFilters
+          taskSearch={taskSearch}
+          onTaskSearch={setTaskSearch}
+          taskStatusFilter={taskStatusFilter}
+          onTaskStatusFilter={setTaskStatusFilter}
+          availableTaskTags={availableTaskTags}
+          selectedTaskTags={selectedTaskTags}
+          onSelectedTaskTags={setSelectedTaskTags}
+          onSave={saveCurrentFilter}
+          savedTaskFilters={savedTaskFilters}
+          onApplySavedFilter={applySavedFilter}
+        />
         <div className="kanban">
           {statuses.map((status) => (
             <div className="column" key={status}>
@@ -48,6 +114,11 @@ export default function Page() {
                 <article key={task._id} className="card">
                   <strong>{task.title}</strong>
                   <p>{task.description || "No description"}</p>
+                  <TagEditor
+                    tags={task.tags || []}
+                    onAdd={(tag) => addTaskTag({ id: task._id, tag })}
+                    onRemove={(tag) => removeTaskTag({ id: task._id, tag })}
+                  />
                   <div className="row">
                     <select value={task.status} onChange={(e) => updateTask({ id: task._id, status: e.target.value })}>
                       {statuses.map((value) => (
@@ -78,6 +149,11 @@ export default function Page() {
                   <strong>{item.title}</strong>
                   <p><b>Owner:</b> {item.owner}</p>
                   <p>{item.brief || "No brief"}</p>
+                  <TagEditor
+                    tags={item.tags || []}
+                    onAdd={(tag) => addPipelineTag({ id: item._id, tag })}
+                    onRemove={(tag) => removePipelineTag({ id: item._id, tag })}
+                  />
                   <details>
                     <summary>Script</summary>
                     <pre>{item.script || "No script yet"}</pre>
@@ -155,17 +231,120 @@ export default function Page() {
   );
 }
 
+function TaskFilters({
+  taskSearch,
+  onTaskSearch,
+  taskStatusFilter,
+  onTaskStatusFilter,
+  availableTaskTags,
+  selectedTaskTags,
+  onSelectedTaskTags,
+  onSave,
+  savedTaskFilters,
+  onApplySavedFilter
+}) {
+  const toggleTag = (tag) => {
+    onSelectedTaskTags(
+      selectedTaskTags.includes(tag)
+        ? selectedTaskTags.filter((value) => value !== tag)
+        : [...selectedTaskTags, tag]
+    );
+  };
+
+  return (
+    <div className="filterBar">
+      <input
+        placeholder="Search title or description"
+        value={taskSearch}
+        onChange={(event) => onTaskSearch(event.target.value)}
+      />
+      <select value={taskStatusFilter} onChange={(event) => onTaskStatusFilter(event.target.value)}>
+        <option value="all">all statuses</option>
+        {statuses.map((status) => (
+          <option key={status} value={status}>{status}</option>
+        ))}
+      </select>
+      <div className="chipsWrap">
+        {availableTaskTags.map((tag) => (
+          <button
+            key={tag}
+            type="button"
+            className={`chip ${selectedTaskTags.includes(tag) ? "chipActive" : ""}`}
+            onClick={() => toggleTag(tag)}
+          >
+            #{tag}
+          </button>
+        ))}
+      </div>
+      <button type="button" onClick={onSave}>Save current filter</button>
+      {savedTaskFilters.length > 0 && (
+        <div className="chipsWrap">
+          {savedTaskFilters.map((filter) => (
+            <button key={filter.id} type="button" className="chip" onClick={() => onApplySavedFilter(filter)}>
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TagEditor({ tags, onAdd, onRemove }) {
+  const [value, setValue] = useState("");
+
+  const addTag = async () => {
+    const normalized = normalizeTag(value);
+    if (!normalized) return;
+    await onAdd(normalized);
+    setValue("");
+  };
+
+  return (
+    <div>
+      <div className="chipsWrap">
+        {tags.map((tag) => (
+          <button key={tag} type="button" className="chip" onClick={() => onRemove(tag)}>
+            #{tag} ×
+          </button>
+        ))}
+      </div>
+      <input
+        placeholder="Add tag"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            addTag();
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 function TaskComposer({ onCreate }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignee, setAssignee] = useState("you");
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState("");
+
+  const addTag = () => {
+    const normalized = normalizeTag(tagInput);
+    if (!normalized) return;
+    setTags((current) => [...new Set([...current, normalized])]);
+    setTagInput("");
+  };
 
   const submit = async (event) => {
     event.preventDefault();
     if (!title.trim()) return;
-    await onCreate({ title, description, assignee });
+    await onCreate({ title, description, assignee, tags });
     setTitle("");
     setDescription("");
+    setTags([]);
   };
 
   return (
@@ -176,6 +355,24 @@ function TaskComposer({ onCreate }) {
         <option value="me">me</option>
         <option value="you">you</option>
       </select>
+      <div className="chipsWrap">
+        {tags.map((tag) => (
+          <button key={tag} type="button" className="chip" onClick={() => setTags((current) => current.filter((value) => value !== tag))}>
+            #{tag} ×
+          </button>
+        ))}
+      </div>
+      <input
+        placeholder="Add tag"
+        value={tagInput}
+        onChange={(event) => setTagInput(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            addTag();
+          }
+        }}
+      />
       <button type="submit">Add task</button>
     </form>
   );
@@ -183,6 +380,15 @@ function TaskComposer({ onCreate }) {
 
 function PipelineComposer({ onSave }) {
   const [form, setForm] = useState({ title: "", stage: "idea", brief: "", script: "", imageUrls: "", owner: "you" });
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState("");
+
+  const addTag = () => {
+    const normalized = normalizeTag(tagInput);
+    if (!normalized) return;
+    setTags((current) => [...new Set([...current, normalized])]);
+    setTagInput("");
+  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -193,9 +399,11 @@ function PipelineComposer({ onSave }) {
       brief: form.brief,
       script: form.script,
       imageUrls: form.imageUrls.split(",").map((value) => value.trim()).filter(Boolean),
-      owner: form.owner
+      owner: form.owner,
+      tags
     });
     setForm({ title: "", stage: "idea", brief: "", script: "", imageUrls: "", owner: "you" });
+    setTags([]);
   };
 
   return (
@@ -211,6 +419,24 @@ function PipelineComposer({ onSave }) {
       <input placeholder="Brief" value={form.brief} onChange={(e) => setForm({ ...form, brief: e.target.value })} />
       <textarea placeholder="Full script" value={form.script} onChange={(e) => setForm({ ...form, script: e.target.value })} />
       <input placeholder="Image URLs (comma separated)" value={form.imageUrls} onChange={(e) => setForm({ ...form, imageUrls: e.target.value })} />
+      <div className="chipsWrap">
+        {tags.map((tag) => (
+          <button key={tag} type="button" className="chip" onClick={() => setTags((current) => current.filter((value) => value !== tag))}>
+            #{tag} ×
+          </button>
+        ))}
+      </div>
+      <input
+        placeholder="Add tag"
+        value={tagInput}
+        onChange={(event) => setTagInput(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            addTag();
+          }
+        }}
+      />
       <button type="submit">Save pipeline item</button>
     </form>
   );
