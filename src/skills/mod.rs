@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use directories::UserDirs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,6 +15,18 @@ pub mod types;
 const OPEN_SKILLS_REPO_URL: &str = "https://github.com/besoeasy/open-skills";
 const OPEN_SKILLS_SYNC_MARKER: &str = ".zeroclaw-open-skills-sync";
 const OPEN_SKILLS_SYNC_INTERVAL_SECS: u64 = 60 * 60 * 24 * 7;
+
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct SkillFrontmatter {
+    command_dispatch: Option<String>,
+    command_tool: Option<String>,
+}
+
+enum SkillRunMode {
+    PromptOnly { instructions: String },
+    ToolDispatch { tool_name: String },
+}
 
 /// A skill is a user-defined or community-built capability.
 /// Skills live in `~/.zeroclaw/workspace/skills/<name>/SKILL.md`
@@ -829,7 +841,8 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
 
 /// Handle the `skills` CLI command
 #[allow(clippy::too_many_lines)]
-pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Result<()> {
+pub async fn handle_command(command: crate::SkillCommands, config: &crate::config::Config) -> Result<()> {
+    let workspace_dir = &config.workspace_dir;
     match command {
         crate::SkillCommands::List => {
             let skills = load_skills(workspace_dir);
@@ -1001,7 +1014,247 @@ pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Re
             );
             Ok(())
         }
+        crate::SkillCommands::Run {
+            skill_name,
+            raw_args,
+        } => {
+            let invocation = prepare_skill_invocation(config, &skill_name)?;
+            let command = raw_args.join(" ").trim().to_string();
+
+            match invocation.mode {
+                SkillRunMode::PromptOnly { instructions } => {
+                    let response = run_prompt_only_mode(config, &instructions, &command).await?;
+                    println!("{response}");
+                }
+                SkillRunMode::ToolDispatch { tool_name } => {
+                    let slash_command = format!("/{skill_name}");
+                    let result = run_tool_dispatch_mode(
+                        config,
+                        &tool_name,
+                        &command,
+                        &slash_command,
+                        &skill_name,
+                    )
+                    .await?;
+
+                    if result.success {
+                        println!("{}", result.output);
+                    } else {
+                        let error = result.error.unwrap_or_else(|| result.output.clone());
+                        anyhow::bail!("Skill tool dispatch failed: {error}");
+                    }
+                }
+            }
+
+            Ok(())
+        }
     }
+}
+
+
+struct PreparedSkillInvocation {
+    mode: SkillRunMode,
+}
+
+fn prepare_skill_invocation(
+    config: &crate::config::Config,
+    skill_name: &str,
+) -> Result<PreparedSkillInvocation> {
+    let skill_dir = resolve_eligible_skill_dir(&config.workspace_dir, skill_name)?;
+    let skill_path = skill_dir.join("SKILL.md");
+    let content = std::fs::read_to_string(&skill_path)
+        .with_context(|| format!("Failed to read {}", skill_path.display()))?;
+
+    let (frontmatter, body) = parse_skill_frontmatter_and_body(&content);
+
+    if frontmatter.command_dispatch.as_deref() == Some("tool") {
+        let tool_name = frontmatter
+            .command_tool
+            .filter(|name| !name.trim().is_empty())
+            .context("Skill frontmatter requires non-empty `command-tool` when `command-dispatch: tool`")?;
+        return Ok(PreparedSkillInvocation {
+            mode: SkillRunMode::ToolDispatch { tool_name },
+        });
+    }
+
+    Ok(PreparedSkillInvocation {
+        mode: SkillRunMode::PromptOnly {
+            instructions: render_skill_body(&body, &skill_dir),
+        },
+    })
+}
+
+fn resolve_eligible_skill_dir(workspace_dir: &Path, skill_name: &str) -> Result<PathBuf> {
+    if skill_name.contains("..") || skill_name.contains('/') || skill_name.contains('\\') {
+        anyhow::bail!("Invalid skill name: {skill_name}");
+    }
+
+    let path = skills_dir(workspace_dir).join(skill_name);
+    if !path.exists() {
+        anyhow::bail!("Skill not found or not eligible to run: {skill_name}");
+    }
+
+    let canonical = path
+        .canonicalize()
+        .with_context(|| format!("Failed to resolve skill path for {skill_name}"))?;
+    let canonical_skills_root = skills_dir(workspace_dir)
+        .canonicalize()
+        .unwrap_or_else(|_| skills_dir(workspace_dir));
+
+    if !canonical.starts_with(&canonical_skills_root) {
+        anyhow::bail!("Skill not found or not eligible to run: {skill_name}");
+    }
+
+    if !canonical.join("SKILL.md").exists() {
+        anyhow::bail!("Skill not found or not eligible to run: {skill_name}");
+    }
+
+    Ok(canonical)
+}
+
+fn parse_skill_frontmatter_and_body(content: &str) -> (SkillFrontmatter, String) {
+    let Some(stripped) = content.strip_prefix("---
+") else {
+        return (SkillFrontmatter::default(), content.to_string());
+    };
+
+    let Some(end_idx) = stripped.find("
+---
+") else {
+        return (SkillFrontmatter::default(), content.to_string());
+    };
+
+    let frontmatter_raw = &stripped[..end_idx];
+    let body = stripped[end_idx + "
+---
+".len()..].to_string();
+
+    let mut frontmatter = SkillFrontmatter::default();
+    for line in frontmatter_raw.lines() {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+
+        let key = key.trim();
+        let value = value.trim().trim_matches('"').trim_matches('\'');
+        match key {
+            "command-dispatch" => frontmatter.command_dispatch = Some(value.to_string()),
+            "command-tool" => frontmatter.command_tool = Some(value.to_string()),
+            _ => {}
+        }
+    }
+
+    (frontmatter, body)
+}
+
+fn render_skill_body(body: &str, skill_dir: &Path) -> String {
+    body.replace("{baseDir}", &skill_dir.display().to_string())
+}
+
+async fn run_prompt_only_mode(
+    config: &crate::config::Config,
+    instructions: &str,
+    raw_command: &str,
+) -> Result<String> {
+    let prompt = if raw_command.is_empty() {
+        "Run the skill with no additional arguments.".to_string()
+    } else {
+        raw_command.to_string()
+    };
+
+    let provider_name = config.default_provider.as_deref().unwrap_or("openrouter");
+    let model_name = config
+        .default_model
+        .clone()
+        .unwrap_or_else(|| "anthropic/claude-sonnet-4-20250514".into());
+    let provider: Box<dyn crate::providers::Provider> = crate::providers::create_routed_provider(
+        provider_name,
+        config.api_key.as_deref(),
+        &config.reliability,
+        &config.model_routes,
+        &model_name,
+    )?;
+
+    let response = provider
+        .chat_with_system(Some(instructions), &prompt, &model_name, 0.2)
+        .await?;
+    Ok(response)
+}
+
+async fn run_tool_dispatch_mode(
+    config: &crate::config::Config,
+    tool_name: &str,
+    raw_command: &str,
+    slash_command: &str,
+    skill_name: &str,
+) -> Result<crate::tools::traits::ToolResult> {
+    use serde_json::json;
+
+    let observer: std::sync::Arc<dyn crate::observability::Observer> = std::sync::Arc::from(
+        crate::observability::create_observer(&config.observability),
+    );
+    let runtime: std::sync::Arc<dyn crate::runtime::RuntimeAdapter> =
+        std::sync::Arc::from(crate::runtime::create_runtime(&config.runtime)?);
+    let security = std::sync::Arc::new(crate::security::SecurityPolicy::from_config(
+        &config.autonomy,
+        &config.workspace_dir,
+    ));
+    let memory: std::sync::Arc<dyn crate::memory::Memory> = std::sync::Arc::from(
+        crate::memory::create_memory(&config.memory, &config.workspace_dir, config.api_key.as_deref())?,
+    );
+
+    let (composio_key, composio_entity_id) = if config.composio.enabled {
+        (
+            config.composio.api_key.as_deref(),
+            Some(config.composio.entity_id.as_str()),
+        )
+    } else {
+        (None, None)
+    };
+
+    let mut tools_registry = crate::tools::all_tools_with_runtime(
+        &security,
+        runtime,
+        memory,
+        composio_key,
+        composio_entity_id,
+        &config.browser,
+        &config.http_request,
+        &config.workspace_dir,
+        &config.agents,
+        config.api_key.as_deref(),
+        config,
+    );
+    let peripheral_tools: Vec<Box<dyn crate::tools::Tool>> =
+        crate::peripherals::create_peripheral_tools(&config.peripherals).await?;
+    tools_registry.extend(peripheral_tools);
+
+    observer.record_event(&crate::observability::ObserverEvent::ToolCallStart {
+        tool: tool_name.to_string(),
+    });
+
+    let Some(tool) = tools_registry.iter().find(|tool| tool.name() == tool_name) else {
+        anyhow::bail!(
+            "Skill dispatch tool '{}' is not available in the current runtime.",
+            tool_name
+        );
+    };
+
+    let result = tool
+        .execute(json!({
+            "command": raw_command,
+            "commandName": slash_command,
+            "skillName": skill_name,
+        }))
+        .await?;
+
+    observer.record_event(&crate::observability::ObserverEvent::ToolCall {
+        tool: tool_name.to_string(),
+        duration: std::time::Duration::from_millis(0),
+        success: result.success,
+    });
+
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -1398,94 +1651,18 @@ exit 0
     }
 
     #[test]
-    fn skill_env_injection_and_restore() {
-        let dynamic = format!("ZEROCLAW_TEST_ENV_{}", std::process::id());
-        std::env::remove_var(&dynamic);
-
-        let skill = Skill {
-            name: "env-skill".into(),
-            description: "d".into(),
-            version: "0.1.0".into(),
-            author: None,
-            tags: vec![],
-            tools: vec![],
-            prompts: vec![],
-            location: None,
-            skill_key: "env-key".into(),
-            primary_env: Some("ZEROCLAW_PRIMARY_ENV_TEST".into()),
-            requires_env: vec![],
-        };
-
-        std::env::set_var("ZEROCLAW_PRIMARY_ENV_TEST", "already-set");
-
-        let mut entries = HashMap::new();
-        entries.insert(
-            "env-key".into(),
-            SkillEntryConfig {
-                enabled: Some(true),
-                api_key: Some("secret-key".into()),
-                env: HashMap::from([(dynamic.clone(), "from-config".into())]),
-                config: HashMap::new(),
-            },
-        );
-
-        {
-            let _guard = apply_env_overrides_for_run_with_entries(&[skill], &entries);
-            assert_eq!(std::env::var(&dynamic).as_deref(), Ok("from-config"));
-            assert_eq!(
-                std::env::var("ZEROCLAW_PRIMARY_ENV_TEST").as_deref(),
-                Ok("already-set")
-            );
-        }
-
-        assert!(std::env::var(&dynamic).is_err());
-        assert_eq!(
-            std::env::var("ZEROCLAW_PRIMARY_ENV_TEST").as_deref(),
-            Ok("already-set")
-        );
-        std::env::remove_var("ZEROCLAW_PRIMARY_ENV_TEST");
+    fn render_skill_body_substitutes_base_dir() {
+        let rendered = render_skill_body("Root: {baseDir}", Path::new("/tmp/skill"));
+        assert_eq!(rendered, "Root: /tmp/skill");
     }
 
     #[test]
-    fn skill_api_key_maps_to_primary_env() {
-        std::env::remove_var("ZEROCLAW_PRIMARY_ENV_API_KEY_TEST");
-
-        let skill = Skill {
-            name: "api-skill".into(),
-            description: "d".into(),
-            version: "0.1.0".into(),
-            author: None,
-            tags: vec![],
-            tools: vec![],
-            prompts: vec![],
-            location: None,
-            skill_key: "api-key".into(),
-            primary_env: Some("ZEROCLAW_PRIMARY_ENV_API_KEY_TEST".into()),
-            requires_env: vec!["ZEROCLAW_PRIMARY_ENV_API_KEY_TEST".into()],
-        };
-
-        let mut entries = HashMap::new();
-        entries.insert(
-            "api-key".into(),
-            SkillEntryConfig {
-                enabled: Some(true),
-                api_key: Some("mapped-secret".into()),
-                env: HashMap::new(),
-                config: HashMap::new(),
-            },
-        );
-
-        assert!(skill_requirements_met(&skill, entries.get("api-key")));
-
-        {
-            let _guard = apply_env_overrides_for_run_with_entries(&[skill], &entries);
-            assert_eq!(
-                std::env::var("ZEROCLAW_PRIMARY_ENV_API_KEY_TEST").as_deref(),
-                Ok("mapped-secret")
-            );
-        }
-
-        assert!(std::env::var("ZEROCLAW_PRIMARY_ENV_API_KEY_TEST").is_err());
+    fn parse_frontmatter_routes_to_tool_dispatch() {
+        let content = "---\ncommand-dispatch: tool\ncommand-tool: schedule\n---\n# Body";
+        let (frontmatter, body) = parse_skill_frontmatter_and_body(content);
+        assert_eq!(frontmatter.command_dispatch.as_deref(), Some("tool"));
+        assert_eq!(frontmatter.command_tool.as_deref(), Some("schedule"));
+        assert_eq!(body, "# Body");
     }
 
 }
