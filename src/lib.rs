@@ -55,6 +55,7 @@ pub mod memory;
 pub mod migration;
 pub mod observability;
 pub mod onboard;
+pub mod orchestrator;
 pub mod peripherals;
 pub mod providers;
 pub mod rag;
@@ -115,6 +116,11 @@ pub enum SkillCommands {
     Install {
         /// Source URL or local path
         source: String,
+    },
+    /// Show details for a skill by frontmatter name
+    Show {
+        /// Skill name from SKILL.md frontmatter
+        name: String,
     },
     /// Remove an installed skill
     Remove {

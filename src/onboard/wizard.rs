@@ -2,7 +2,7 @@ use crate::config::schema::{DingTalkConfig, IrcConfig, WhatsAppConfig};
 use crate::config::{
     AutonomyConfig, BrowserConfig, ChannelsConfig, ComposioConfig, Config, DiscordConfig,
     HeartbeatConfig, IMessageConfig, MatrixConfig, MemoryConfig, ObservabilityConfig,
-    RuntimeConfig, SecretsConfig, SlackConfig, TelegramConfig, WebhookConfig,
+    OrchestratorConfig, RuntimeConfig, SecretsConfig, SlackConfig, TelegramConfig, WebhookConfig,
 };
 use crate::hardware::{self, HardwareConfig};
 use crate::memory::{
@@ -118,6 +118,7 @@ pub fn run_wizard() -> Result<Config> {
         model_routes: Vec::new(),
         heartbeat: HeartbeatConfig::default(),
         channels_config,
+        orchestrator: OrchestratorConfig::default(),
         memory: memory_config, // User-selected memory backend
         tunnel: tunnel_config,
         gateway: crate::config::GatewayConfig::default(),
@@ -330,6 +331,7 @@ pub fn run_quick_setup(
         model_routes: Vec::new(),
         heartbeat: HeartbeatConfig::default(),
         channels_config: ChannelsConfig::default(),
+        orchestrator: OrchestratorConfig::default(),
         memory: memory_config,
         tunnel: crate::config::TunnelConfig::default(),
         gateway: crate::config::GatewayConfig::default(),

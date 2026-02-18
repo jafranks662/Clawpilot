@@ -1,0 +1,18 @@
+# Safe OpenRouter baseline profile
+# Repo is clawpilot; CLI is still `zeroclaw`.
+
+[provider]
+name = "openrouter"
+
+[agent]
+autonomy = "supervised"
+
+[security]
+workspace_only = true
+
+[runtime]
+kind = "docker"
+network = "none" # switch to "bridge" only when explicitly needed
+
+[tools.browser]
+enabled = false
