@@ -6,13 +6,20 @@ import { api } from "@/convex/_generated/api";
 
 const stages = ["idea", "research", "outline", "draft", "review", "design", "publish"];
 const statuses = ["todo", "in_progress", "blocked", "done"];
+const EMPTY_ARRAY = [];
 
 export default function Page() {
   const board = useQuery(api.mission.dashboard) || { tasks: [], pipeline: [], calendar: [], memories: [], agents: [] };
+  const boardsQuery = useQuery(api.boards.listBoards);
+  const boards = boardsQuery ?? EMPTY_ARRAY;
   const [memoryQuery, setMemoryQuery] = useState("");
+  const [selectedBoardId, setSelectedBoardId] = useState(null);
+  const [backfillStatus, setBackfillStatus] = useState("");
   const filteredMemories = useQuery(api.mission.searchMemories, { query: memoryQuery }) || [];
 
   const seed = useMutation(api.mission.seed);
+  const ensureDefaultBoard = useMutation(api.boards.ensureDefaultBoard);
+  const backfillTaskBoards = useMutation(api.boards.backfillTaskBoards);
   const createTask = useMutation(api.mission.createTask);
   const updateTask = useMutation(api.mission.updateTask);
   const upsertPipeline = useMutation(api.mission.upsertPipeline);
@@ -21,14 +28,33 @@ export default function Page() {
 
   useEffect(() => {
     seed();
-  }, [seed]);
+    ensureDefaultBoard();
+  }, [seed, ensureDefaultBoard]);
+
+  useEffect(() => {
+    if (!selectedBoardId && boards.length > 0) {
+      setSelectedBoardId(boards[0]._id);
+    }
+  }, [boards, selectedBoardId]);
 
   const groupedTasks = useMemo(() => {
+    const selectedBoard = boards.find((item) => item._id === selectedBoardId);
+    const visibleTasks = board.tasks.filter((task) => {
+      if (!selectedBoardId) return true;
+      if (task.boardId === selectedBoardId) return true;
+      return selectedBoard?.isDefault && !task.boardId;
+    });
+
     return statuses.reduce((acc, status) => {
-      acc[status] = board.tasks.filter((task) => task.status === status);
+      acc[status] = visibleTasks.filter((task) => task.status === status);
       return acc;
     }, {});
-  }, [board.tasks]);
+  }, [board.tasks, boards, selectedBoardId]);
+
+  const runBackfill = async () => {
+    const result = await backfillTaskBoards();
+    setBackfillStatus(`Backfill complete. Updated ${result.updated} task(s).`);
+  };
 
   return (
     <main className="page">
@@ -38,8 +64,24 @@ export default function Page() {
       </header>
 
       <section className="panel">
-        <h2>Task Board</h2>
-        <TaskComposer onCreate={createTask} />
+        <div className="panel-heading">
+          <h2>Task Board</h2>
+          <div className="board-controls">
+            <label>
+              Board
+              <select value={selectedBoardId || ""} onChange={(e) => setSelectedBoardId(e.target.value)}>
+                {boards.map((item) => (
+                  <option key={item._id} value={item._id}>
+                    {item.name}{item.isDefault ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" onClick={runBackfill}>Run one-time backfill</button>
+          </div>
+        </div>
+        {backfillStatus && <p className="inline-note">{backfillStatus}</p>}
+        <TaskComposer onCreate={createTask} selectedBoardId={selectedBoardId} />
         <div className="kanban">
           {statuses.map((status) => (
             <div className="column" key={status}>
@@ -155,15 +197,15 @@ export default function Page() {
   );
 }
 
-function TaskComposer({ onCreate }) {
+function TaskComposer({ onCreate, selectedBoardId }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [assignee, setAssignee] = useState("you");
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!title.trim()) return;
-    await onCreate({ title, description, assignee });
+    if (!title.trim() || !selectedBoardId) return;
+    await onCreate({ title, description, assignee, boardId: selectedBoardId });
     setTitle("");
     setDescription("");
   };
@@ -176,7 +218,7 @@ function TaskComposer({ onCreate }) {
         <option value="me">me</option>
         <option value="you">you</option>
       </select>
-      <button type="submit">Add task</button>
+      <button type="submit" disabled={!selectedBoardId}>Add task</button>
     </form>
   );
 }

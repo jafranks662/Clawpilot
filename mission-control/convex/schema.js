@@ -2,15 +2,21 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  boards: defineTable({
+    name: v.string(),
+    isDefault: v.boolean(),
+    createdAt: v.number()
+  }).index("by_is_default", ["isDefault"]),
   tasks: defineTable({
     title: v.string(),
     description: v.optional(v.string()),
+    boardId: v.optional(v.id("boards")),
     status: v.union(v.literal("todo"), v.literal("in_progress"), v.literal("blocked"), v.literal("done")),
     assignee: v.union(v.literal("me"), v.literal("you")),
     priority: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
     createdAt: v.number(),
     updatedAt: v.number()
-  }).index("by_status", ["status"]),
+  }).index("by_status", ["status"]).index("by_board", ["boardId"]),
   pipelineItems: defineTable({
     title: v.string(),
     stage: v.union(

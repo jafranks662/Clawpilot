@@ -19,13 +19,15 @@ export const createTask = mutation({
   args: {
     title: v.string(),
     description: v.optional(v.string()),
-    assignee: v.union(v.literal("me"), v.literal("you"))
+    assignee: v.union(v.literal("me"), v.literal("you")),
+    boardId: v.id("boards")
   },
   handler: async (ctx, args) => {
     const now = Date.now();
     await ctx.db.insert("tasks", {
       title: args.title,
       description: args.description,
+      boardId: args.boardId,
       assignee: args.assignee,
       status: "todo",
       priority: "medium",
