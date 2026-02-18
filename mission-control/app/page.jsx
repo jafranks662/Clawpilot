@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { ActivityPanel } from "@/components/activity-panel";
 
 const stages = ["idea", "research", "outline", "draft", "review", "design", "publish"];
 const statuses = ["todo", "in_progress", "blocked", "done"];
@@ -37,7 +38,7 @@ export default function Page() {
         <p>Realtime collaboration hub powered by Next.js + Convex.</p>
       </header>
 
-      <section className="panel">
+      <section className="panel" id="tasks">
         <h2>Task Board</h2>
         <TaskComposer onCreate={createTask} />
         <div className="kanban">
@@ -66,7 +67,7 @@ export default function Page() {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel" id="pipeline">
         <h2>Content Pipeline</h2>
         <PipelineComposer onSave={upsertPipeline} />
         <div className="grid">
@@ -91,7 +92,7 @@ export default function Page() {
       </section>
 
       <section className="panel two-col">
-        <div>
+        <div id="calendar">
           <h2>Calendar</h2>
           <CalendarComposer onCreate={createCalendarEvent} />
           {board.calendar
@@ -107,7 +108,7 @@ export default function Page() {
             ))}
         </div>
 
-        <div>
+        <div id="memories">
           <h2>Memory Documents</h2>
           <MemoryComposer onSave={createMemory} />
           <input
@@ -125,8 +126,10 @@ export default function Page() {
         </div>
       </section>
 
+      <ActivityPanel />
+
       <section className="panel two-col">
-        <div>
+        <div id="agents">
           <h2>Team Structure</h2>
           {board.agents.map((agent) => (
             <article key={agent._id} className="card">
