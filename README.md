@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="zeroclaw.png" alt="ZeroClaw" width="200" />
+  <img src="zeroclaw.png" alt="ClawPilot" width="200" />
 </p>
 
 <h1 align="center">clawpilot 🦀</h1>
@@ -29,7 +29,14 @@ Fast, small, and fully autonomous AI assistant infrastructure — deploy anywher
 - ⚡ **Lightning Fast:** 400X Faster startup time, boot in <10ms (under 1s even on 0.6GHz cores).
 - 🌍 **True Portability:** Single self-contained binary across ARM, x86, and RISC-V.
 
-### Why teams pick ZeroClaw
+### 🆕 Added functionality in the ClawPilot update
+
+- Unified runtime behavior with explicit fail-fast errors for unsupported runtime adapters.
+- Expanded integrations surface with 50+ integrations and 22+ model providers.
+- Hybrid memory engine improvements: FTS5 + vector similarity with weighted merges.
+- Hardware-ready peripherals workflow for STM32, ESP32, and Raspberry Pi boards.
+
+### Why teams pick ClawPilot
 
 - **Lean by default:** small Rust binary, fast startup, low memory footprint.
 - **Secure by design:** pairing, strict sandboxing, explicit allowlists, workspace scoping.
@@ -46,7 +53,7 @@ Fast, small, and fully autonomous AI assistant infrastructure — deploy anywher
 
 Local machine quick benchmark (macOS arm64, Feb 2026) normalized for 0.8GHz edge hardware.
 
-| | OpenClaw | NanoBot | PicoClaw | ZeroClaw 🦀 |
+| | OpenClaw | NanoBot | PicoClaw | ClawPilot 🦀 |
 |---|---|---|---|---|
 | **Language** | TypeScript | Python | Go | **Rust** |
 | **RAM** | > 1GB | > 100MB | < 10MB | **< 5MB** |
@@ -54,13 +61,13 @@ Local machine quick benchmark (macOS arm64, Feb 2026) normalized for 0.8GHz edge
 | **Binary Size** | ~28MB (dist) | N/A (Scripts) | ~8MB | **3.4 MB** |
 | **Cost** | Mac Mini $599 | Linux SBC ~$50 | Linux Board $10 | **Any hardware $10** |
 
-> Notes: ZeroClaw results measured with `/usr/bin/time -l` on release builds. OpenClaw requires Node.js runtime (~390MB overhead). PicoClaw and ZeroClaw are static binaries.
+> Notes: ClawPilot results measured with `/usr/bin/time -l` on release builds. OpenClaw requires Node.js runtime (~390MB overhead). PicoClaw and ClawPilot are static binaries.
 
 <p align="center">
-  <img src="zero-claw.jpeg" alt="ZeroClaw vs OpenClaw Comparison" width="800" />
+  <img src="zero-claw.jpeg" alt="ClawPilot vs OpenClaw Comparison" width="800" />
 </p>
 
-Reproduce ZeroClaw numbers locally:
+Reproduce ClawPilot numbers locally:
 
 ```bash
 cargo build --release
@@ -88,7 +95,7 @@ zeroclaw onboard --interactive
 zeroclaw onboard --channels-only
 
 # Chat
-zeroclaw agent -m "Hello, ZeroClaw!"
+zeroclaw agent -m "Hello, ClawPilot!"
 
 # Interactive mode
 zeroclaw agent
@@ -136,7 +143,7 @@ zeroclaw migrate openclaw
 Every subsystem is a **trait** — swap implementations with a config change, zero code changes.
 
 <p align="center">
-  <img src="docs/architecture.svg" alt="ZeroClaw Architecture" width="900" />
+  <img src="docs/architecture.svg" alt="ClawPilot Architecture" width="900" />
 </p>
 
 | Subsystem | Trait | Ships with | Extend |
@@ -159,7 +166,7 @@ Every subsystem is a **trait** — swap implementations with a config change, ze
 - ✅ Supported today: `runtime.kind = "native"` or `runtime.kind = "docker"`
 - 🚧 Planned, not implemented yet: WASM / edge runtimes
 
-When an unsupported `runtime.kind` is configured, ZeroClaw now exits with a clear error instead of silently falling back to native.
+When an unsupported `runtime.kind` is configured, ClawPilot now exits with a clear error instead of silently falling back to native.
 
 ### Memory System (Full-Stack Search Engine)
 
@@ -198,7 +205,7 @@ keyword_weight = 0.3
 
 ## Security
 
-ZeroClaw enforces security at **every layer** — not just the sandbox. It passes all items from the community security checklist.
+ClawPilot enforces security at **every layer** — not just the sandbox. It passes all items from the community security checklist.
 
 ### Security Checklist
 
@@ -209,7 +216,7 @@ ZeroClaw enforces security at **every layer** — not just the sandbox. It passe
 | 3 | **Filesystem scoped (no /)** | ✅ | `workspace_only = true` by default. 14 system dirs + 4 sensitive dotfiles blocked. Null byte injection blocked. Symlink escape detection via canonicalization + resolved-path workspace checks in file read/write tools. |
 | 4 | **Access via tunnel only** | ✅ | Gateway refuses public bind without active tunnel. Supports Tailscale, Cloudflare, ngrok, or any custom tunnel. |
 
-> **Run your own nmap:** `nmap -p 1-65535 <your-host>` — ZeroClaw binds to localhost only, so nothing is exposed unless you explicitly configure a tunnel.
+> **Run your own nmap:** `nmap -p 1-65535 <your-host>` — ClawPilot binds to localhost only, so nothing is exposed unless you explicitly configure a tunnel.
 
 ### Channel allowlists (Telegram / Discord / Slack)
 
@@ -255,7 +262,7 @@ WhatsApp uses Meta's Cloud API with webhooks (push-based, not polling):
    - **Phone Number ID:** From WhatsApp → API Setup → Phone number ID
    - **Verify Token:** You define this (any random string) — Meta will send it back during webhook verification
 
-3. **Configure ZeroClaw:**
+3. **Configure ClawPilot:**
    ```toml
    [channels_config.whatsapp]
    access_token = "EAABx..."
@@ -276,7 +283,7 @@ WhatsApp uses Meta's Cloud API with webhooks (push-based, not polling):
    - **Verify Token:** Same as your `verify_token` in config
    - Subscribe to `messages` field
 
-6. **Test:** Send a message to your WhatsApp Business number — ZeroClaw will respond via the LLM.
+6. **Test:** Send a message to your WhatsApp Business number — ClawPilot will respond via the LLM.
 
 ## Configuration
 
@@ -373,7 +380,7 @@ format = "openclaw"             # "openclaw" (default, markdown files) or "aieos
 
 ## Identity System (AIEOS Support)
 
-ZeroClaw supports **identity-agnostic** AI personas through two formats:
+ClawPilot supports **identity-agnostic** AI personas through two formats:
 
 ### OpenClaw (Default)
 
@@ -385,7 +392,7 @@ Traditional markdown files in your workspace:
 
 ### AIEOS (AI Entity Object Specification)
 
-[AIEOS](https://aieos.org) is a standardization framework for portable AI identity. ZeroClaw supports AIEOS v1.1 JSON payloads, allowing you to:
+[AIEOS](https://aieos.org) is a standardization framework for portable AI identity. ClawPilot supports AIEOS v1.1 JSON payloads, allowing you to:
 
 - **Import identities** from the AIEOS ecosystem
 - **Export identities** to other AIEOS-compatible systems
@@ -499,7 +506,7 @@ cargo build --release --locked
 cargo install --path . --force --locked
 ```
 
-ZeroClaw is configured to use `rustls` for HTTP/TLS dependencies; `--locked` keeps the transitive graph deterministic on fresh environments.
+ClawPilot is configured to use `rustls` for HTTP/TLS dependencies; `--locked` keeps the transitive graph deterministic on fresh environments.
 
 To skip the hook when you need a quick push during development:
 
@@ -519,7 +526,7 @@ For high-throughput collaboration and consistent reviews:
 
 ## Support
 
-ZeroClaw is an open-source project maintained with passion. If you find it useful and would like to support its continued development, hardware for testing, and coffee for the maintainer, you can support me here:
+ClawPilot is an open-source project maintained with passion. If you find it useful and would like to support its continued development, hardware for testing, and coffee for the maintainer, you can support me here:
 
 <a href="https://buymeacoffee.com/argenistherose"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-yellow.svg?style=for-the-badge&logo=buy-me-a-coffee" alt="Buy Me a Coffee" /></a>
 
@@ -557,7 +564,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Implement a trait, submit a PR:
 
 ---
 
-**ZeroClaw** — Zero overhead. Zero compromise. Deploy anywhere. Swap anything. 🦀
+**ClawPilot** — Zero overhead. Zero compromise. Deploy anywhere. Swap anything. 🦀
 
 ## Star History
 
