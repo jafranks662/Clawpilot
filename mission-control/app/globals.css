@@ -29,6 +29,14 @@ body {
   background: #101728;
 }
 
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
 .two-col {
   display: grid;
   gap: 18px;
@@ -59,6 +67,12 @@ body {
   background: #111e33;
 }
 
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .document {
   background: #142643;
 }
@@ -78,6 +92,54 @@ button {
   border: 1px solid #2e446c;
   border-radius: 8px;
   padding: 8px;
+}
+
+.button-primary {
+  background: #2554d8;
+  border-color: #3b6cf5;
+}
+
+.button-muted {
+  background: #1d2a42;
+  border-color: #324c75;
+}
+
+.button-danger {
+  background: #7f2630;
+  border-color: #b33b4a;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.confirm-dialog {
+  border: 1px solid #32496f;
+  border-radius: 14px;
+  background: #121b2d;
+  color: #f2f5ff;
+  width: min(440px, calc(100% - 32px));
+  padding: 0;
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(4, 7, 13, 0.6);
+}
+
+.confirm-dialog__content {
+  padding: 18px;
+}
+
+.confirm-dialog__content h3 {
+  margin-top: 0;
+}
+
+.confirm-dialog__actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 button {

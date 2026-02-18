@@ -51,6 +51,36 @@ export const updateTask = mutation({
   }
 });
 
+export const deleteTask = mutation({
+  args: {
+    id: v.id("tasks")
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+  }
+});
+
+export const completeAllOpenTasks = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const openTasks = await ctx.db
+      .query("tasks")
+      .filter((q) => q.neq(q.field("status"), "done"))
+      .collect();
+
+    await Promise.all(
+      openTasks.map((task) =>
+        ctx.db.patch(task._id, {
+          status: "done",
+          updatedAt: Date.now()
+        })
+      )
+    );
+
+    return openTasks.length;
+  }
+});
+
 export const upsertPipeline = mutation({
   args: {
     id: v.optional(v.id("pipelineItems")),
@@ -72,6 +102,15 @@ export const upsertPipeline = mutation({
   }
 });
 
+export const deletePipelineItem = mutation({
+  args: {
+    id: v.id("pipelineItems")
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+  }
+});
+
 export const createCalendarEvent = mutation({
   args: {
     title: v.string(),
@@ -90,6 +129,15 @@ export const createMemory = mutation({
   args: { title: v.string(), body: v.string(), tags: v.array(v.string()) },
   handler: async (ctx, args) => {
     return await ctx.db.insert("memories", { ...args, createdAt: Date.now() });
+  }
+});
+
+export const clearMemories = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const memories = await ctx.db.query("memories").collect();
+    await Promise.all(memories.map((memory) => ctx.db.delete(memory._id)));
+    return memories.length;
   }
 });
 

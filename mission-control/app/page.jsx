@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 const stages = ["idea", "research", "outline", "draft", "review", "design", "publish"];
 const statuses = ["todo", "in_progress", "blocked", "done"];
@@ -15,9 +16,15 @@ export default function Page() {
   const seed = useMutation(api.mission.seed);
   const createTask = useMutation(api.mission.createTask);
   const updateTask = useMutation(api.mission.updateTask);
+  const deleteTask = useMutation(api.mission.deleteTask);
+  const completeAllOpenTasks = useMutation(api.mission.completeAllOpenTasks);
   const upsertPipeline = useMutation(api.mission.upsertPipeline);
+  const deletePipelineItem = useMutation(api.mission.deletePipelineItem);
   const createCalendarEvent = useMutation(api.mission.createCalendarEvent);
   const createMemory = useMutation(api.mission.createMemory);
+  const clearMemories = useMutation(api.mission.clearMemories);
+  const [confirmState, setConfirmState] = useState(null);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   useEffect(() => {
     seed();
@@ -32,13 +39,58 @@ export default function Page() {
 
   return (
     <main className="page">
+      <ConfirmDialog
+        isOpen={Boolean(confirmState)}
+        title={confirmState?.title}
+        description={confirmState?.description}
+        confirmText={confirmState?.confirmText}
+        cancelText={confirmState?.cancelText}
+        isDanger={confirmState?.isDanger}
+        isSubmitting={isConfirming}
+        onCancel={() => {
+          if (isConfirming) return;
+          setConfirmState(null);
+        }}
+        onConfirm={async () => {
+          if (!confirmState?.onConfirm) return;
+          setIsConfirming(true);
+          try {
+            await confirmState.onConfirm();
+            setConfirmState(null);
+          } finally {
+            setIsConfirming(false);
+          }
+        }}
+      />
+
       <header className="hero">
         <h1>Mission Control</h1>
         <p>Realtime collaboration hub powered by Next.js + Convex.</p>
       </header>
 
       <section className="panel">
-        <h2>Task Board</h2>
+        <div className="panel-header">
+          <h2>Task Board</h2>
+          <button
+            type="button"
+            className="button-muted"
+            onClick={() => {
+              const openTaskCount = board.tasks.filter((task) => task.status !== "done").length;
+              if (openTaskCount === 0) return;
+              setConfirmState({
+                title: "Move all open tasks to done?",
+                description: `This will mark ${openTaskCount} active task${openTaskCount === 1 ? "" : "s"} as done.`,
+                confirmText: "Move to done",
+                cancelText: "Cancel",
+                onConfirm: () => completeAllOpenTasks(),
+                isDanger: false
+              });
+            }}
+            disabled={board.tasks.every((task) => task.status === "done")}
+          >
+            Move open tasks to done
+          </button>
+        </div>
         <TaskComposer onCreate={createTask} />
         <div className="kanban">
           {statuses.map((status) => (
@@ -58,6 +110,22 @@ export default function Page() {
                       <option value="me">me</option>
                       <option value="you">you</option>
                     </select>
+                    <button
+                      type="button"
+                      className="button-danger"
+                      onClick={() =>
+                        setConfirmState({
+                          title: "Delete this task?",
+                          description: `"${task.title}" will be permanently removed from the board.`,
+                          confirmText: "Delete task",
+                          cancelText: "Cancel",
+                          onConfirm: () => deleteTask({ id: task._id }),
+                          isDanger: true
+                        })
+                      }
+                    >
+                      Delete
+                    </button>
                   </div>
                 </article>
               ))}
@@ -83,6 +151,22 @@ export default function Page() {
                     <pre>{item.script || "No script yet"}</pre>
                   </details>
                   {item.imageUrls.length > 0 && <p><b>Images:</b> {item.imageUrls.join(", ")}</p>}
+                  <button
+                    type="button"
+                    className="button-danger"
+                    onClick={() =>
+                      setConfirmState({
+                        title: "Delete this pipeline item?",
+                        description: `"${item.title}" will be removed from the content pipeline.`,
+                        confirmText: "Delete item",
+                        cancelText: "Cancel",
+                        onConfirm: () => deletePipelineItem({ id: item._id }),
+                        isDanger: true
+                      })
+                    }
+                  >
+                    Delete
+                  </button>
                 </article>
               ))}
             </div>
@@ -108,7 +192,27 @@ export default function Page() {
         </div>
 
         <div>
-          <h2>Memory Documents</h2>
+          <div className="panel-header">
+            <h2>Memory Documents</h2>
+            <button
+              type="button"
+              className="button-danger"
+              onClick={() => {
+                if (filteredMemories.length === 0) return;
+                setConfirmState({
+                  title: "Clear memory documents?",
+                  description: "This will permanently remove all memory documents.",
+                  confirmText: "Clear memories",
+                  cancelText: "Cancel",
+                  onConfirm: () => clearMemories(),
+                  isDanger: true
+                });
+              }}
+              disabled={filteredMemories.length === 0}
+            >
+              Clear memories
+            </button>
+          </div>
           <MemoryComposer onSave={createMemory} />
           <input
             placeholder="Search memories..."
