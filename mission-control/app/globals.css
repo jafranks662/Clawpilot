@@ -1,0 +1,122 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #090d16;
+  color: #f2f5ff;
+}
+
+.page {
+  padding: 24px;
+  display: grid;
+  gap: 20px;
+}
+
+.hero {
+  border: 1px solid #2a3654;
+  background: linear-gradient(150deg, #151c2f, #101728);
+  padding: 20px;
+  border-radius: 16px;
+}
+
+.panel {
+  border: 1px solid #273451;
+  border-radius: 16px;
+  padding: 16px;
+  background: #101728;
+}
+
+.two-col {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.kanban,
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.column {
+  border: 1px solid #213252;
+  border-radius: 12px;
+  padding: 12px;
+  background: #0d1424;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.card {
+  border: 1px solid #21314d;
+  border-radius: 12px;
+  padding: 10px;
+  background: #111e33;
+}
+
+.document {
+  background: #142643;
+}
+
+.composer {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+input,
+textarea,
+select,
+button {
+  background: #0d1525;
+  color: #f2f5ff;
+  border: 1px solid #2e446c;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+button {
+  cursor: pointer;
+  background: #2554d8;
+  border-color: #3b6cf5;
+  font-weight: 600;
+}
+
+pre {
+  white-space: pre-wrap;
+}
+
+.office {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.desk {
+  border: 1px solid #2b3f5f;
+  border-radius: 10px;
+  text-align: center;
+  background: #0f1729;
+  padding: 10px;
+}
+
+.person {
+  font-size: 2rem;
+}
+
+.pc {
+  font-size: 1.25rem;
+}
+
+.working { color: #57d98b; }
+.idle { color: #ffbf47; }
+.reviewing { color: #8cb3ff; }
+
+.avatar {
+  font-size: 1.1rem;
+}
