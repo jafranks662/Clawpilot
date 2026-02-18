@@ -331,6 +331,11 @@ enum SkillCommands {
         /// GitHub URL or local path
         source: String,
     },
+    /// Show details for a skill by frontmatter name
+    Show {
+        /// Skill name from SKILL.md frontmatter
+        name: String,
+    },
     /// Remove an installed skill
     Remove {
         /// Skill name
