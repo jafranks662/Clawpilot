@@ -1,4 +1,7 @@
 export const api = {
+  brief: {
+    getDailyBrief: "brief:getDailyBrief"
+  },
   mission: {
     dashboard: "mission:dashboard",
     createTask: "mission:createTask",

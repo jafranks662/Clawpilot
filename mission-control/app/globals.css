@@ -120,3 +120,55 @@ pre {
 .avatar {
   font-size: 1.1rem;
 }
+
+.brief-panel h2 {
+  margin-top: 0;
+}
+
+.brief-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.brief-section {
+  border: 1px solid #213252;
+  border-radius: 12px;
+  padding: 12px;
+  background: #0d1424;
+}
+
+.brief-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.brief-header-row h3 {
+  margin: 0;
+}
+
+.brief-count {
+  border: 1px solid #355288;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-weight: 600;
+}
+
+.brief-section ul {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.brief-section li {
+  display: grid;
+  gap: 2px;
+}
+
+.brief-section li small,
+.brief-empty {
+  color: #9cb4dd;
+}

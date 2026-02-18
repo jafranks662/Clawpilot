@@ -10,7 +10,10 @@ export default defineSchema({
     priority: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
     createdAt: v.number(),
     updatedAt: v.number()
-  }).index("by_status", ["status"]),
+  })
+    .index("by_status", ["status"])
+    .index("by_priority", ["priority"])
+    .index("by_updatedAt", ["updatedAt"]),
   pipelineItems: defineTable({
     title: v.string(),
     stage: v.union(

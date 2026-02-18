@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { TodayCard } from "@/components/today-card";
 
 const stages = ["idea", "research", "outline", "draft", "review", "design", "publish"];
 const statuses = ["todo", "in_progress", "blocked", "done"];
+const priorities = ["low", "medium", "high"];
 
 export default function Page() {
   const board = useQuery(api.mission.dashboard) || { tasks: [], pipeline: [], calendar: [], memories: [], agents: [] };
+  const dailyBrief = useQuery(api.brief.getDailyBrief);
   const [memoryQuery, setMemoryQuery] = useState("");
   const filteredMemories = useQuery(api.mission.searchMemories, { query: memoryQuery }) || [];
 
@@ -37,6 +40,8 @@ export default function Page() {
         <p>Realtime collaboration hub powered by Next.js + Convex.</p>
       </header>
 
+      <TodayCard brief={dailyBrief} />
+
       <section className="panel">
         <h2>Task Board</h2>
         <TaskComposer onCreate={createTask} />
@@ -51,6 +56,11 @@ export default function Page() {
                   <div className="row">
                     <select value={task.status} onChange={(e) => updateTask({ id: task._id, status: e.target.value })}>
                       {statuses.map((value) => (
+                        <option key={value} value={value}>{value}</option>
+                      ))}
+                    </select>
+                    <select value={task.priority} onChange={(e) => updateTask({ id: task._id, priority: e.target.value })}>
+                      {priorities.map((value) => (
                         <option key={value} value={value}>{value}</option>
                       ))}
                     </select>

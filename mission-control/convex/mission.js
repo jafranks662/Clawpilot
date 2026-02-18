@@ -40,12 +40,14 @@ export const updateTask = mutation({
     id: v.id("tasks"),
     status: v.optional(v.union(v.literal("todo"), v.literal("in_progress"), v.literal("blocked"), v.literal("done"))),
     assignee: v.optional(v.union(v.literal("me"), v.literal("you"))),
+    priority: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"))),
     description: v.optional(v.string())
   },
   handler: async (ctx, args) => {
     const patch = { updatedAt: Date.now() };
     if (args.status) patch.status = args.status;
     if (args.assignee) patch.assignee = args.assignee;
+    if (args.priority) patch.priority = args.priority;
     if (args.description !== undefined) patch.description = args.description;
     await ctx.db.patch(args.id, patch);
   }
