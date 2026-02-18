@@ -120,3 +120,35 @@ pre {
 .avatar {
   font-size: 1.1rem;
 }
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.filterBar {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chipsWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  background: #172846;
+  border: 1px solid #325287;
+  color: #dbe8ff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+}
+
+.chipActive {
+  background: #2554d8;
+  border-color: #4777ff;
+}

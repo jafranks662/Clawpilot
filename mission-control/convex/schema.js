@@ -5,6 +5,7 @@ export default defineSchema({
   tasks: defineTable({
     title: v.string(),
     description: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
     status: v.union(v.literal("todo"), v.literal("in_progress"), v.literal("blocked"), v.literal("done")),
     assignee: v.union(v.literal("me"), v.literal("you")),
     priority: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
@@ -13,6 +14,7 @@ export default defineSchema({
   }).index("by_status", ["status"]),
   pipelineItems: defineTable({
     title: v.string(),
+    tags: v.optional(v.array(v.string())),
     stage: v.union(
       v.literal("idea"),
       v.literal("research"),
