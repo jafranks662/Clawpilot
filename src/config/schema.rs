@@ -51,6 +51,9 @@ pub struct Config {
     pub channels_config: ChannelsConfig,
 
     #[serde(default)]
+    pub orchestrator: OrchestratorConfig,
+
+    #[serde(default)]
     pub memory: MemoryConfig,
 
     #[serde(default)]
@@ -1556,6 +1559,37 @@ pub struct DingTalkConfig {
     pub allowed_users: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrchestratorConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub allowed_agents: Vec<String>,
+    #[serde(default = "default_orchestrator_service_prefix")]
+    pub service_prefix: String,
+    #[serde(default = "default_orchestrator_max_log_lines")]
+    pub max_log_lines: usize,
+}
+
+fn default_orchestrator_service_prefix() -> String {
+    "clawpilot@".into()
+}
+
+fn default_orchestrator_max_log_lines() -> usize {
+    80
+}
+
+impl Default for OrchestratorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allowed_agents: Vec::new(),
+            service_prefix: default_orchestrator_service_prefix(),
+            max_log_lines: default_orchestrator_max_log_lines(),
+        }
+    }
+}
+
 // ── Config impl ──────────────────────────────────────────────────
 
 impl Default for Config {
@@ -1580,6 +1614,7 @@ impl Default for Config {
             model_routes: Vec::new(),
             heartbeat: HeartbeatConfig::default(),
             channels_config: ChannelsConfig::default(),
+            orchestrator: OrchestratorConfig::default(),
             memory: MemoryConfig::default(),
             tunnel: TunnelConfig::default(),
             gateway: GatewayConfig::default(),
@@ -1936,6 +1971,7 @@ mod tests {
                 lark: None,
                 dingtalk: None,
             },
+            orchestrator: OrchestratorConfig::default(),
             memory: MemoryConfig::default(),
             tunnel: TunnelConfig::default(),
             gateway: GatewayConfig::default(),
@@ -2043,6 +2079,7 @@ tool_dispatcher = "xml"
             model_routes: Vec::new(),
             heartbeat: HeartbeatConfig::default(),
             channels_config: ChannelsConfig::default(),
+            orchestrator: OrchestratorConfig::default(),
             memory: MemoryConfig::default(),
             tunnel: TunnelConfig::default(),
             gateway: GatewayConfig::default(),

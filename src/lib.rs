@@ -55,6 +55,7 @@ pub mod memory;
 pub mod migration;
 pub mod observability;
 pub mod onboard;
+pub mod orchestrator;
 pub mod peripherals;
 pub mod providers;
 pub mod rag;

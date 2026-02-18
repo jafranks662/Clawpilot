@@ -146,3 +146,16 @@ panic = "abort"
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.14"
+
+[package.metadata.deb]
+depends = "ca-certificates, curl, systemd, jq"
+recommends = "docker.io"
+maintainer-scripts = "debian"
+assets = [
+  ["target/release/zeroclaw", "/usr/bin/zeroclaw", "755"],
+  ["systemd/clawpilot@.service", "/lib/systemd/system/clawpilot@.service", "644"],
+  ["systemd/clawpilot-orchestrator.service", "/lib/systemd/system/clawpilot-orchestrator.service", "644"],
+  ["scripts/", "/usr/lib/clawpilot/scripts/", "755"],
+  ["examples/", "/usr/share/clawpilot/examples/", "644"],
+  ["docs/", "/usr/share/doc/clawpilot/", "644"],
+]

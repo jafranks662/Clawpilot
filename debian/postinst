@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+mkdir -p /var/lib/clawpilot/queue /var/lib/clawpilot/results
+chown -R root:root /var/lib/clawpilot
+chmod -R 755 /var/lib/clawpilot
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload || true
+fi
+
+echo "clawpilot installed. Services are not auto-enabled."
+echo "Enable manually, for example:"
+echo "  sudo systemctl enable --now clawpilot-orchestrator.service"
+echo "  sudo systemctl enable --now clawpilot@research.service"
