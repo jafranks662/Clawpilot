@@ -1,6 +1,6 @@
-# ZeroClaw Development Environment
+# ClawPilot Development Environment
 
-A fully containerized development sandbox for ZeroClaw agents. This environment allows you to develop, test, and debug the agent in isolation without modifying your host system.
+A fully containerized development sandbox for ClawPilot agents. This environment allows you to develop, test, and debug the agent in isolation without modifying your host system.
 
 ## Directory Structure
 
@@ -14,6 +14,13 @@ A fully containerized development sandbox for ZeroClaw agents. This environment 
     - Simulates a real developer machine.
 - **`docker-compose.yml`**: Defines the services and `dev-net` network.
 - **`cli.sh`**: Helper script to manage the lifecycle.
+
+
+## What's New in ClawPilot
+
+- Updated branding and docs naming to ClawPilot.
+- Clarified local CI pipeline stages and strict lint entrypoints.
+- Retained compatibility details for existing `zeroclaw` CLI/container names.
 
 ## Usage
 

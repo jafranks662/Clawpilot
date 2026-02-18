@@ -276,7 +276,7 @@ impl Agent {
             .temperature(config.default_temperature)
             .workspace_dir(config.workspace_dir.clone())
             .identity_config(config.identity.clone())
-            .skills(crate::skills::load_skills(&config.workspace_dir))
+            .skills(crate::skills::load_skills_for_run(&config.workspace_dir))
             .auto_save(config.memory.auto_save)
             .build()
     }
