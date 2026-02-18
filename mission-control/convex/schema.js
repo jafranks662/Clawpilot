@@ -53,5 +53,16 @@ export default defineSchema({
     area: v.string(),
     avatar: v.string(),
     updatedAt: v.number()
-  }).index("by_role", ["role"])
+  }).index("by_role", ["role"]),
+  activity: defineTable({
+    createdAt: v.number(),
+    actor: v.union(v.literal("me"), v.literal("you")),
+    entityType: v.union(v.literal("task"), v.literal("pipeline"), v.literal("memory"), v.literal("agent"), v.literal("calendar")),
+    entityId: v.string(),
+    action: v.string(),
+    summary: v.string(),
+    metadata: v.optional(v.any())
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_entity", ["entityType", "entityId"])
 });

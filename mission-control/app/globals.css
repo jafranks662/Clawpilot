@@ -120,3 +120,40 @@ pre {
 .avatar {
   font-size: 1.1rem;
 }
+
+.activity-list {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-item {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #21314d;
+  border-radius: 12px;
+  padding: 10px;
+  background: #111e33;
+  color: inherit;
+  text-decoration: none;
+}
+
+.activity-item:hover {
+  border-color: #3b6cf5;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.badge {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8cb3ff;
+}
+
+.muted {
+  color: #9aa7c3;
+}
