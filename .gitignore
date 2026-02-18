@@ -5,3 +5,8 @@ firmware/*/target
 .DS_Store
 .wt-pr37/
 .env
+*.env
+logs/
+artifacts/
+browser-profile/
+config.local.toml

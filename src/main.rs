@@ -56,6 +56,7 @@ mod memory;
 mod migration;
 mod observability;
 mod onboard;
+mod orchestrator;
 mod peripherals;
 mod providers;
 mod runtime;
@@ -165,6 +166,14 @@ enum Commands {
         /// Host to bind to
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
+
+        /// Optional queue path for worker mode (processes queued /run jobs)
+        #[arg(long)]
+        job_queue: Option<std::path::PathBuf>,
+
+        /// Optional results path for worker mode
+        #[arg(long)]
+        results_dir: Option<std::path::PathBuf>,
     },
 
     /// Manage OS service lifecycle (launchd/systemd user service)
@@ -322,6 +331,11 @@ enum SkillCommands {
         /// GitHub URL or local path
         source: String,
     },
+    /// Show details for a skill by frontmatter name
+    Show {
+        /// Skill name from SKILL.md frontmatter
+        name: String,
+    },
     /// Remove an installed skill
     Remove {
         /// Skill name
@@ -411,13 +425,18 @@ async fn main() -> Result<()> {
             gateway::run_gateway(&host, port, config).await
         }
 
-        Commands::Daemon { port, host } => {
+        Commands::Daemon {
+            port,
+            host,
+            job_queue,
+            results_dir,
+        } => {
             if port == 0 {
                 info!("🧠 Starting ZeroClaw Daemon on {host} (random port)");
             } else {
                 info!("🧠 Starting ZeroClaw Daemon on {host}:{port}");
             }
-            daemon::run(config, host, port).await
+            daemon::run(config, host, port, job_queue, results_dir).await
         }
 
         Commands::Status => {

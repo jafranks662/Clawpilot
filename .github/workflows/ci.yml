@@ -132,7 +132,7 @@ jobs:
             - name: Run rustfmt
               run: cargo fmt --all -- --check
             - name: Run clippy
-              run: cargo clippy --locked --all-targets -- -D clippy::correctness
+              run: cargo clippy --all-targets --all-features -- -D warnings
 
     test:
         name: Test
@@ -147,7 +147,7 @@ jobs:
                   toolchain: 1.92
             - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
             - name: Run tests
-              run: cargo test --locked --verbose
+              run: cargo test --all
 
     build:
         name: Build (Smoke)
