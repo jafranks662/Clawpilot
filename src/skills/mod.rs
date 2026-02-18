@@ -3,6 +3,7 @@ use directories::UserDirs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime};
@@ -31,6 +32,10 @@ pub struct Skill {
     pub tools: Vec<SkillTool>,
     #[serde(default)]
     pub prompts: Vec<String>,
+    #[serde(default = "default_true")]
+    pub eligible: bool,
+    #[serde(default)]
+    pub ineligible_reasons: Vec<String>,
     #[serde(skip)]
     pub location: Option<PathBuf>,
     #[serde(skip)]
@@ -65,6 +70,10 @@ pub struct SkillEntryConfig {
     pub config: HashMap<String, Value>,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// A tool defined by a skill (shell command, HTTP call, etc.)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillTool {
@@ -86,6 +95,14 @@ struct SkillManifest {
     tools: Vec<SkillTool>,
     #[serde(default)]
     prompts: Vec<String>,
+    #[serde(default)]
+    metadata: SkillManifestMetadata,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct SkillManifestMetadata {
+    #[serde(default)]
+    openclaw: Option<SkillOpenClawMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,63 +116,51 @@ struct SkillMeta {
     #[serde(default)]
     tags: Vec<String>,
     #[serde(default)]
-    requirements: SkillRequirements,
-    #[serde(default)]
-    metadata: SkillMetadata,
+    metadata: SkillManifestMetadata,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum SkillOs {
+    Linux,
+    Darwin,
+    Win32,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct SkillRequirements {
+struct SkillOpenClawMetadata {
+    #[serde(default)]
+    always: bool,
+    #[serde(default)]
+    os: Option<SkillOs>,
+    #[serde(default)]
+    requires: SkillRequires,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct SkillRequires {
+    #[serde(default)]
+    bins: Vec<String>,
+    #[serde(default, rename = "anyBins")]
+    any_bins: Vec<String>,
     #[serde(default)]
     env: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct SkillMetadata {
     #[serde(default)]
-    openclaw: OpenClawMetadata,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct OpenClawMetadata {
-    #[serde(default, rename = "skillKey")]
-    skill_key: Option<String>,
-    #[serde(default, rename = "primaryEnv")]
-    primary_env: Option<String>,
-}
-
-pub struct SkillEnvGuard {
-    original: HashMap<String, Option<String>>,
-}
-
-impl Drop for SkillEnvGuard {
-    fn drop(&mut self) {
-        for (key, value) in &self.original {
-            match value {
-                Some(v) => std::env::set_var(key, v),
-                None => std::env::remove_var(key),
-            }
-        }
-    }
-}
-
-impl SkillEnvGuard {
-    fn new() -> Self {
-        Self {
-            original: HashMap::new(),
-        }
-    }
-
-    fn capture(&mut self, key: &str) {
-        if !self.original.contains_key(key) {
-            self.original
-                .insert(key.to_string(), std::env::var(key).ok());
-        }
-    }
+    config: Vec<String>,
 }
 
 fn default_version() -> String {
     "0.1.0".to_string()
+}
+
+fn current_os() -> SkillOs {
+    if cfg!(target_os = "linux") {
+        SkillOs::Linux
+    } else if cfg!(target_os = "macos") {
+        SkillOs::Darwin
+    } else {
+        SkillOs::Win32
+    }
 }
 
 /// Load all skills from the workspace skills directory
@@ -274,10 +279,10 @@ fn injected_env_names(skill: &Skill, entry: Option<&SkillEntryConfig>) -> Vec<St
 
 fn load_workspace_skills(workspace_dir: &Path) -> Vec<Skill> {
     let skills_dir = workspace_dir.join("skills");
-    load_skills_from_directory(&skills_dir)
+    load_skills_from_directory(&skills_dir, workspace_dir)
 }
 
-fn load_skills_from_directory(skills_dir: &Path) -> Vec<Skill> {
+fn load_skills_from_directory(skills_dir: &Path, workspace_dir: &Path) -> Vec<Skill> {
     if !skills_dir.exists() {
         return Vec::new();
     }
@@ -299,7 +304,7 @@ fn load_skills_from_directory(skills_dir: &Path) -> Vec<Skill> {
         let md_path = path.join("SKILL.md");
 
         if manifest_path.exists() {
-            if let Ok(skill) = load_skill_toml(&manifest_path) {
+            if let Ok(skill) = load_skill_toml(&manifest_path, workspace_dir) {
                 skills.push(skill);
             }
         } else if md_path.exists() {
@@ -478,10 +483,127 @@ fn mark_open_skills_synced(repo_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+
+fn find_binary_in_path(bin: &str, path_override: Option<&OsString>) -> bool {
+    if bin.trim().is_empty() {
+        return false;
+    }
+
+    if bin.contains(std::path::MAIN_SEPARATOR) {
+        return Path::new(bin).is_file();
+    }
+
+    let path_value = path_override.cloned().or_else(|| std::env::var_os("PATH"));
+    let Some(path_value) = path_value else {
+        return false;
+    };
+
+    std::env::split_paths(&path_value)
+        .map(|entry| entry.join(bin))
+        .any(|candidate| candidate.is_file())
+}
+
+fn workspace_config_path(workspace_dir: &Path) -> PathBuf {
+    workspace_dir
+        .parent()
+        .map_or_else(|| workspace_dir.join("config.toml"), |parent| parent.join("config.toml"))
+}
+
+fn has_config_key(workspace_dir: &Path, key: &str) -> bool {
+    let path = workspace_config_path(workspace_dir);
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(value) = toml::from_str::<toml::Value>(&content) else {
+        return false;
+    };
+
+    let mut current = &value;
+    for part in key.split('.') {
+        let Some(next) = current.get(part) else {
+            return false;
+        };
+        current = next;
+    }
+
+    true
+}
+
+fn evaluate_skill_eligibility(
+    openclaw: Option<&SkillOpenClawMetadata>,
+    workspace_dir: &Path,
+    path_override: Option<&OsString>,
+    env_override: Option<&HashMap<String, String>>,
+) -> (bool, Vec<String>) {
+    let Some(gating) = openclaw else {
+        return (true, Vec::new());
+    };
+
+    if gating.always {
+        return (true, Vec::new());
+    }
+
+    let mut reasons = Vec::new();
+
+    if let Some(required_os) = &gating.os {
+        let os = current_os();
+        if required_os != &os {
+            reasons.push(format!("requires os={required_os:?}, current os={os:?}"));
+        }
+    }
+
+    for bin in &gating.requires.bins {
+        if !find_binary_in_path(bin, path_override) {
+            reasons.push(format!("missing required binary '{bin}' on PATH"));
+        }
+    }
+
+    if !gating.requires.any_bins.is_empty()
+        && !gating
+            .requires
+            .any_bins
+            .iter()
+            .any(|bin| find_binary_in_path(bin, path_override))
+    {
+        reasons.push(format!(
+            "missing any required binary on PATH ({})",
+            gating.requires.any_bins.join(", ")
+        ));
+    }
+
+    for env_name in &gating.requires.env {
+        let present = env_override
+            .and_then(|envs| envs.get(env_name).cloned())
+            .or_else(|| std::env::var(env_name).ok())
+            .is_some_and(|value| !value.trim().is_empty());
+        if !present {
+            reasons.push(format!("missing required env '{env_name}'"));
+        }
+    }
+
+    for key in &gating.requires.config {
+        if !has_config_key(workspace_dir, key) {
+            reasons.push(format!(
+                "requires.config '{key}' unsupported currently (no matching config found)"
+            ));
+        }
+    }
+
+    (reasons.is_empty(), reasons)
+}
+
 /// Load a skill from a SKILL.toml manifest
-fn load_skill_toml(path: &Path) -> Result<Skill> {
+fn load_skill_toml(path: &Path, workspace_dir: &Path) -> Result<Skill> {
     let content = std::fs::read_to_string(path)?;
     let manifest: SkillManifest = toml::from_str(&content)?;
+
+    let openclaw = manifest
+        .metadata
+        .openclaw
+        .as_ref()
+        .or(manifest.skill.metadata.openclaw.as_ref());
+    let (eligible, ineligible_reasons) =
+        evaluate_skill_eligibility(openclaw, workspace_dir, None, None);
 
     Ok(Skill {
         skill_key: manifest
@@ -500,6 +622,8 @@ fn load_skill_toml(path: &Path) -> Result<Skill> {
         tags: manifest.skill.tags,
         tools: manifest.tools,
         prompts: manifest.prompts,
+        eligible,
+        ineligible_reasons,
         location: Some(path.to_path_buf()),
     })
 }
@@ -524,6 +648,8 @@ fn load_skill_md(path: &Path, dir: &Path) -> Result<Skill> {
         tags: Vec::new(),
         tools: Vec::new(),
         prompts: vec![content],
+        eligible: true,
+        ineligible_reasons: Vec::new(),
         location: Some(path.to_path_buf()),
     })
 }
@@ -547,6 +673,8 @@ fn load_open_skill_md(path: &Path) -> Result<Skill> {
         tags: vec!["open-skills".to_string()],
         tools: Vec::new(),
         prompts: vec![content],
+        eligible: true,
+        ineligible_reasons: Vec::new(),
         location: Some(path.to_path_buf()),
     })
 }
@@ -704,17 +832,52 @@ fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<()> {
 pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Result<()> {
     match command {
         crate::SkillCommands::List => {
-            let skills = scan::scan_skills(None)?;
-            print_skills_list_table(&skills);
-            Ok(())
-        }
-        crate::SkillCommands::Show { name } => {
-            let skills = scan::scan_skills(None)?;
-            let Some(skill) = skills.into_iter().find(|s| s.frontmatter.name == name) else {
-                anyhow::bail!("Skill not found: {name}");
-            };
-
-            print_skill_detail(&skill);
+            let skills = load_skills(workspace_dir);
+            if skills.is_empty() {
+                println!("No skills installed.");
+                println!();
+                println!("  Create one: mkdir -p ~/.zeroclaw/workspace/skills/my-skill");
+                println!("              echo '# My Skill' > ~/.zeroclaw/workspace/skills/my-skill/SKILL.md");
+                println!();
+                println!("  Or install: zeroclaw skills install <github-url>");
+            } else {
+                println!("Installed skills ({}):", skills.len());
+                println!();
+                for skill in &skills {
+                    let eligibility_badge = if skill.eligible {
+                        console::style("eligible").green().bold().to_string()
+                    } else {
+                        console::style("ineligible").red().bold().to_string()
+                    };
+                    println!(
+                        "  {} {} [{}] — {}",
+                        console::style(&skill.name).white().bold(),
+                        console::style(format!("v{}", skill.version)).dim(),
+                        eligibility_badge,
+                        skill.description
+                    );
+                    if !skill.eligible {
+                        if let Some(reason) = skill.ineligible_reasons.first() {
+                            println!("    Reason: {}", reason);
+                        }
+                    }
+                    if !skill.tools.is_empty() {
+                        println!(
+                            "    Tools: {}",
+                            skill
+                                .tools
+                                .iter()
+                                .map(|t| t.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        );
+                    }
+                    if !skill.tags.is_empty() {
+                        println!("    Tags:  {}", skill.tags.join(", "));
+                    }
+                }
+            }
+            println!();
             Ok(())
         }
         crate::SkillCommands::Install { source } => {
@@ -921,6 +1084,8 @@ command = "echo hello"
             tags: vec![],
             tools: vec![],
             prompts: vec!["Do the thing.".to_string()],
+            eligible: true,
+            ineligible_reasons: Vec::new(),
             location: None,
             skill_key: "test".to_string(),
             primary_env: None,
@@ -1114,6 +1279,8 @@ description = "Bare minimum"
                 args: HashMap::new(),
             }],
             prompts: vec![],
+            eligible: true,
+            ineligible_reasons: Vec::new(),
             location: None,
             skill_key: "weather".to_string(),
             primary_env: None,
@@ -1131,6 +1298,84 @@ description = "Bare minimum"
         let base = std::path::Path::new("/home/user/.zeroclaw");
         let dir = skills_dir(base);
         assert_eq!(dir, PathBuf::from("/home/user/.zeroclaw/skills"));
+    }
+
+    #[test]
+    fn gating_always_true_overrides_other_requirements() {
+        let dir = tempfile::tempdir().unwrap();
+        let metadata = SkillOpenClawMetadata {
+            always: true,
+            os: Some(SkillOs::Darwin),
+            requires: SkillRequires {
+                bins: vec!["missing-bin".to_string()],
+                any_bins: vec!["missing-a".to_string(), "missing-b".to_string()],
+                env: vec!["ZEROCLAW_TEST_ENV".to_string()],
+                config: vec!["providers.openai.api_key".to_string()],
+            },
+        };
+
+        let (eligible, reasons) =
+            evaluate_skill_eligibility(Some(&metadata), dir.path(), None, Some(&HashMap::new()));
+
+        assert!(eligible);
+        assert!(reasons.is_empty());
+    }
+
+    #[test]
+    fn gating_requires_bins_any_bins_and_env() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin_dir = dir.path().join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        fs::write(bin_dir.join("available"), "#!/bin/sh
+exit 0
+").unwrap();
+
+        let path_override = OsString::from(bin_dir.as_os_str());
+        let mut env_override = HashMap::new();
+        env_override.insert("ZEROCLAW_REQUIRED_ENV".to_string(), "set".to_string());
+
+        let metadata = SkillOpenClawMetadata {
+            always: false,
+            os: Some(current_os()),
+            requires: SkillRequires {
+                bins: vec!["available".to_string()],
+                any_bins: vec!["missing-one".to_string(), "available".to_string()],
+                env: vec!["ZEROCLAW_REQUIRED_ENV".to_string()],
+                config: Vec::new(),
+            },
+        };
+
+        let (eligible, reasons) = evaluate_skill_eligibility(
+            Some(&metadata),
+            dir.path(),
+            Some(&path_override),
+            Some(&env_override),
+        );
+
+        assert!(eligible);
+        assert!(reasons.is_empty());
+    }
+
+    #[test]
+    fn gating_reports_unsupported_config_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let metadata = SkillOpenClawMetadata {
+            always: false,
+            os: Some(current_os()),
+            requires: SkillRequires {
+                bins: Vec::new(),
+                any_bins: Vec::new(),
+                env: Vec::new(),
+                config: vec!["skills.experimental.enabled".to_string()],
+            },
+        };
+
+        let (eligible, reasons) =
+            evaluate_skill_eligibility(Some(&metadata), dir.path(), None, Some(&HashMap::new()));
+
+        assert!(!eligible);
+        assert_eq!(reasons.len(), 1);
+        assert!(reasons[0].contains("unsupported currently"));
     }
 
     #[test]

@@ -1530,6 +1530,8 @@ mod tests {
             tags: vec![],
             tools: vec![],
             prompts: vec!["Long prompt content that should NOT appear in system prompt".into()],
+            eligible: true,
+            ineligible_reasons: Vec::new(),
             location: None,
             skill_key: "code-review".into(),
             primary_env: None,
