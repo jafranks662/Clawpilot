@@ -1,21 +1,14 @@
 [Unit]
-Description=clawpilot agent (%i)
+Description=Clawpilot worker (%i)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=clawpilot-%i
-WorkingDirectory=/home/clawpilot-%i/work
 EnvironmentFile=-/etc/clawpilot/%i.env
-ExecStart=/usr/local/bin/zeroclaw daemon
-Restart=on-failure
+ExecStart=/usr/bin/zeroclaw daemon --job-queue /var/lib/clawpilot/queue/%i --results-dir /var/lib/clawpilot/results/%i
+Restart=always
 RestartSec=5
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/home/clawpilot-%i
 
 [Install]
 WantedBy=multi-user.target

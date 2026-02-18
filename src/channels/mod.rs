@@ -28,6 +28,7 @@ use crate::agent::loop_::{build_tool_instructions, run_tool_call_loop};
 use crate::config::Config;
 use crate::identity;
 use crate::memory::{self, Memory};
+use crate::orchestrator::Orchestrator;
 use crate::observability::{self, Observer};
 use crate::providers::{self, ChatMessage, Provider};
 use crate::runtime;
@@ -63,6 +64,7 @@ struct ChannelRuntimeContext {
     model: Arc<String>,
     temperature: f64,
     auto_save_memory: bool,
+    orchestrator: Option<Orchestrator>,
 }
 
 fn conversation_memory_key(msg: &traits::ChannelMessage) -> String {
@@ -173,6 +175,27 @@ async fn process_channel_message(ctx: Arc<ChannelRuntimeContext>, msg: traits::C
     if let Some(channel) = target_channel.as_ref() {
         if let Err(e) = channel.start_typing(&msg.sender).await {
             tracing::debug!("Failed to start typing on {}: {e}", channel.name());
+        }
+    }
+
+    if msg.channel == "telegram" {
+        if let Some(orchestrator) = ctx.orchestrator.as_ref() {
+            match orchestrator.handle_message(&msg.content).await {
+                Ok(response) => {
+                    if let Some(channel) = target_channel.as_ref() {
+                        if let Err(e) = channel.send(&response, &msg.sender).await {
+                            eprintln!("  ❌ Failed to reply on {}: {e}", channel.name());
+                        }
+                    }
+                    return;
+                }
+                Err(e) => {
+                    if let Some(channel) = target_channel.as_ref() {
+                        let _ = channel.send(&format!("⚠️ {e}"), &msg.sender).await;
+                    }
+                    return;
+                }
+            }
         }
     }
 
@@ -1049,6 +1072,7 @@ pub async fn start_channels(config: Config) -> Result<()> {
         model: Arc::new(model.clone()),
         temperature,
         auto_save_memory: config.memory.auto_save,
+        orchestrator: config.orchestrator.enabled.then(|| Orchestrator::from_config(config.orchestrator.clone())),
     });
 
     run_message_dispatch_loop(rx, runtime_ctx, max_in_flight_messages).await;
@@ -1235,6 +1259,7 @@ mod tests {
             model: Arc::new("test-model".to_string()),
             temperature: 0.0,
             auto_save_memory: false,
+            orchestrator: None,
         });
 
         process_channel_message(
@@ -1325,6 +1350,7 @@ mod tests {
             model: Arc::new("test-model".to_string()),
             temperature: 0.0,
             auto_save_memory: false,
+            orchestrator: None,
         });
 
         let (tx, rx) = tokio::sync::mpsc::channel::<traits::ChannelMessage>(4);
